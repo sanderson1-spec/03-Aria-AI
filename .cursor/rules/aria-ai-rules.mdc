@@ -1,0 +1,95 @@
+---
+description: Clean Architecture enforcement for AI Chat Application
+globs: 
+alwaysApply: true
+---
+
+# Clean Architecture Enforcement
+
+You are building an AI chat application with **strict clean architecture**. Follow these rules exactly:
+
+## 🚫 IMMEDIATE FAILURE CONDITIONS
+- **Any SQL outside `/repositories/` files** = STOP
+- **Any `console.log` or `console.error`** = STOP  
+- **Not extending `AbstractService`** = STOP
+- **Manual service creation** (e.g., `new ServiceName()`) = STOP
+
+## ✅ MANDATORY PATTERNS
+
+### Service Creation (EXACT PATTERN):
+```javascript
+const AbstractService = require('./base/AbstractService');
+
+class YourService extends AbstractService {
+    constructor(dependencies) {
+        super('YourService', dependencies);
+        this.dal = dependencies.database;
+        this.logger = dependencies.logger;
+        this.psychology = dependencies.psychology; // Other services
+    }
+    
+    async onInitialize() {
+        this.logger.info('Service initialized', 'YourService');
+    }
+    
+    async yourMethod(userId, param) {
+        try {
+            // All user operations MUST include userId
+            const result = await this.dal.yourRepo.method(userId, param);
+            return result;
+        } catch (error) {
+            throw this.errorHandler.wrapDomainError(error, 'Method failed', { userId, param });
+        }
+    }
+}
+```
+
+### Service Registration (MANDATORY):
+```javascript
+// In setupServices.js - EVERY service MUST be registered
+serviceFactory.registerService('yourService', YourService, [
+    'database', 'logger', 'errorHandling', 'psychology'
+]);
+```
+
+### Database Access (ONLY ALLOWED WAY):
+```javascript
+// ✅ CORRECT - Through DAL only
+await this.dal.chats.getUserChats(userId);
+await this.dal.psychology.getState(userId, chatId);
+
+// ❌ FORBIDDEN - Direct SQL
+this.db.run("SELECT...");  // NEVER
+```
+
+## 🏗️ MULTI-USER ARCHITECTURE
+- **Every database operation** MUST include `userId` for data isolation
+- **Chat-centric psychology**: `userId + chatId + characterId` pattern
+- **Multi-device continuity**: Use `chatId` as universal key
+
+## 🔄 DEVELOPMENT WORKFLOW
+1. **Build ONE component** (single file)
+2. **Write unit tests** immediately
+3. **Run validation**: `node validate-architecture.js` (must pass)
+4. **Integration test** with existing services
+5. **Only then proceed** to next component
+
+## 🧠 EXISTING SERVICES (USE, DON'T RECREATE OR MODIFY)
+- `dependencies.psychology` - Character psychology (KEEP 100% - DO NOT MODIFY)
+- `dependencies.structuredResponse` - JSON parsing (KEEP 100% - DO NOT MODIFY)
+- `dependencies.llm` - Dual model LLM (KEEP 100% - DO NOT MODIFY)
+- `dependencies.conversationMemory` - Context intelligence
+- `dependencies.database` - DAL with repositories
+
+## 📋 VALIDATION CHECKLIST
+Before submitting code, verify:
+- [ ] Extends AbstractService
+- [ ] Uses constructor(dependencies) pattern
+- [ ] All database access through `this.dal.repository`
+- [ ] All user operations include `userId`
+- [ ] No console.log anywhere
+- [ ] No direct SQL anywhere
+- [ ] Registered in setupServices.js
+- [ ] Unit tests written
+
+**CRITICAL**: Follow patterns exactly. Do not create variations or "improvements".
