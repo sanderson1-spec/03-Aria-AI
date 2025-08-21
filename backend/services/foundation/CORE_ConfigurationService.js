@@ -1,4 +1,4 @@
-const AbstractService = require('../base/AbstractService');
+const AbstractService = require('../base/CORE_AbstractService');
 const fs = require('fs').promises;
 const path = require('path');
 

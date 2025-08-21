@@ -1,4 +1,4 @@
-const LoggerService = require('../../backend/services/foundation/LoggerService');
+const LoggerService = require('../../backend/services/foundation/CORE_LoggerService');
 
 /**
  * Unit Tests for LoggerService
@@ -53,7 +53,7 @@ describe('LoggerService', () => {
     // CLEAN ARCHITECTURE: Test service creation and inheritance
     describe('Service Creation', () => {
         test('should extend AbstractService', () => {
-            expect(loggerService).toBeInstanceOf(require('../../backend/services/base/AbstractService'));
+            expect(loggerService).toBeInstanceOf(require('../../backend/services/base/CORE_AbstractService'));
         });
 
         test('should create with correct service name', () => {

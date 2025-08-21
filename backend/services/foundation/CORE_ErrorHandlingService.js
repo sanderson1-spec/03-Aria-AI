@@ -1,4 +1,4 @@
-const AbstractService = require('../base/AbstractService');
+const AbstractService = require('../base/CORE_AbstractService');
 
 /**
  * Error Handling Service Foundation

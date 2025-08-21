@@ -1,7 +1,7 @@
-const ServiceFactory = require('../../backend/services/ServiceFactory');
-const LoggerService = require('../../backend/services/foundation/LoggerService');
-const ErrorHandlingService = require('../../backend/services/foundation/ErrorHandlingService');
-const ConfigurationService = require('../../backend/services/foundation/ConfigurationService');
+const ServiceFactory = require('../../backend/services/CORE_ServiceFactory');
+const LoggerService = require('../../backend/services/foundation/CORE_LoggerService');
+const ErrorHandlingService = require('../../backend/services/foundation/CORE_ErrorHandlingService');
+const ConfigurationService = require('../../backend/services/foundation/CORE_ConfigurationService');
 const fs = require('fs').promises;
 
 // Mock fs module for ConfigurationService tests

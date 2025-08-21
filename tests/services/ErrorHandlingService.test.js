@@ -1,4 +1,4 @@
-const ErrorHandlingService = require('../../backend/services/foundation/ErrorHandlingService');
+const ErrorHandlingService = require('../../backend/services/foundation/CORE_ErrorHandlingService');
 
 /**
  * Unit Tests for ErrorHandlingService
@@ -58,7 +58,7 @@ describe('ErrorHandlingService', () => {
     // CLEAN ARCHITECTURE: Test service creation and inheritance
     describe('Service Creation', () => {
         test('should extend AbstractService', () => {
-            expect(errorHandlingService).toBeInstanceOf(require('../../backend/services/base/AbstractService'));
+            expect(errorHandlingService).toBeInstanceOf(require('../../backend/services/base/CORE_AbstractService'));
         });
 
         test('should create with correct service name', () => {
