@@ -14,6 +14,20 @@ You are building an AI chat application with **strict clean architecture**. Foll
 - **Not extending `AbstractService`** = STOP
 - **Manual service creation** (e.g., `new ServiceName()`) = STOP
 
+## 🚨 PROTECTED FILES (DO NOT MODIFY)
+- **Files prefixed with `CORE_`** = Foundation services, DO NOT TOUCH
+- **If CORE_ functionality insufficient** = Extend or compose, don't modify
+- **Ask human before suggesting changes** to any CORE_ file
+
+Examples of protected files:
+- `CORE_LoggerService.js`, `CORE_PsychologyService.js`, `CORE_DataAccessLayer.js`
+
+## 🤖 WHEN TO STOP AND ASK HUMAN
+- Need to modify any CORE_ prefixed file
+- Repository method doesn't exist for required operation  
+- Unsure if functionality already exists in psychology/structuredResponse
+- Complex database schema changes needed
+
 ## ✅ MANDATORY PATTERNS
 
 ### Service Creation (EXACT PATTERN):
@@ -62,6 +76,21 @@ await this.dal.psychology.getState(userId, chatId);
 this.db.run("SELECT...");  // NEVER
 ```
 
+## 💡 AI QUICK REFERENCE
+```javascript
+// ✅ ALWAYS: Check if repository method exists first
+const user = await this.dal.users.findById(userId);
+
+// ❌ NEVER: Direct SQL (breaks validation)
+// const user = await this.db.query("SELECT...");
+
+// ✅ ALWAYS: Include userId for data isolation
+await this.dal.chats.getUserChats(userId);
+
+// ❌ NEVER: Operations without user context  
+// await this.dal.chats.getAllChats();
+```
+
 ## 🏗️ MULTI-USER ARCHITECTURE
 - **Every database operation** MUST include `userId` for data isolation
 - **Chat-centric psychology**: `userId + chatId + characterId` pattern
@@ -91,5 +120,6 @@ Before submitting code, verify:
 - [ ] No direct SQL anywhere
 - [ ] Registered in setupServices.js
 - [ ] Unit tests written
+- [ ] No modifications to CORE_ files
 
 **CRITICAL**: Follow patterns exactly. Do not create variations or "improvements".

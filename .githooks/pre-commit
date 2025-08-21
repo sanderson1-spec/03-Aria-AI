@@ -17,7 +17,7 @@ if [ ! -z "$CORE_FILES" ]; then
         echo "🚨 ERROR: Attempting to modify CORE service files:"
         echo "$CORE_FILES"
         echo ""
-        echo "To proceed, create a bypass file in project root:"
+        echo "To proceed, create a bypass file:"
         echo "touch .bypass-core"
         echo "Then commit normally in your GUI"
         echo ""
@@ -26,14 +26,20 @@ if [ ! -z "$CORE_FILES" ]; then
     fi
 fi
 
-# Check for SQL outside repositories
-SQL_VIOLATIONS=$(git diff --cached | grep -E "^\+.*\.(query|run|get|all|execute)\(" | grep -v "/repositories/")
+# SMARTER SQL CHECK: Ignore comments and only catch real violations
+SQL_VIOLATIONS=$(git diff --cached | grep -E "^\+.*\.(query|run|get|all|execute)\(" | \
+    grep -v "/repositories/" | \
+    grep -v "^\+.*//.*\.(query|run|get|all|execute)\(" | \
+    grep -v "^\+.*\*.*\.(query|run|get|all|execute)\(" | \
+    grep -v "^\+[[:space:]]*//.*\.(query|run|get|all|execute)\(" | \
+    grep -v "^\+[[:space:]]*\*.*\.(query|run|get|all|execute)\(")
 
 if [ ! -z "$SQL_VIOLATIONS" ]; then
     echo "🚨 ERROR: SQL found outside repository layer:"
     echo "$SQL_VIOLATIONS"
     echo ""
     echo "This violates clean architecture. Move SQL to appropriate repository."
+    echo "Note: Commented SQL is allowed for examples"
     exit 1
 fi
 
