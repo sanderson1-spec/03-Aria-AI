@@ -18,7 +18,6 @@ class BaseRepository {
         this.logger = dependencies.logger;
         this.errorHandler = dependencies.errorHandling;
         this.dal = dependencies.dal;
-        this.dbAccess = dependencies.dbAccess;
     }
 
     /**
@@ -51,7 +50,7 @@ class BaseRepository {
     async validateTable() {
         try {
             // Check if table exists in sqlite_master
-            const result = await this.dbAccess.queryOne(
+            const result = await this.dal.queryOne(
                 'SELECT sql FROM sqlite_master WHERE type = ? AND name = ?',
                 ['table', this.tableName]
             );
@@ -193,6 +192,7 @@ class BaseRepository {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to parse JSON data');
         }
     }
+
 
     /**
      * Health check

@@ -1,5 +1,6 @@
 const AbstractService = require('../base/CORE_AbstractService');
-const fetch = require('node-fetch');
+// Use built-in fetch in Node.js 18+
+const fetch = globalThis.fetch;
 
 /**
  * Centralized LLM Service
@@ -97,6 +98,13 @@ class LLMService extends AbstractService {
      * INFRASTRUCTURE LAYER: Test connection during initialization
      */
     async testConnection() {
+        // Skip connection test in development mode
+        if (process.env.SKIP_LLM_CONNECTION_TEST === 'true') {
+            this.logger.warn('Skipping LLM connection test (development mode)', 'LLM');
+            this.connectionHealthy = false; // Mark as unhealthy but don't fail initialization
+            return true;
+        }
+        
         const isConnected = await this.checkConnection();
         if (!isConnected) {
             throw new Error(`Cannot connect to LLM endpoint: ${this.config.endpoint}`);
@@ -110,15 +118,21 @@ class LLMService extends AbstractService {
      */
     async checkConnection() {
         try {
-            const response = await fetch(this.config.endpoint.replace('/chat/completions', '/models'), {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const modelsEndpoint = this.config.endpoint.replace('/chat/completions', '/models');
+            const response = await fetch(modelsEndpoint, {
                 method: 'GET',
-                timeout: 5000
+                signal: controller.signal
             });
             
+            clearTimeout(timeoutId);
             return response.ok;
         } catch (error) {
             this.logger.warn('LLM connection check failed', 'LLM', {
-                error: error.message
+                error: error.message,
+                endpoint: this.config.endpoint.replace('/chat/completions', '/models')
             });
             return false;
         }

@@ -1,5 +1,31 @@
 {
+  "name": "aria-ai-chat",
+  "version": "1.0.0",
+  "description": "Aria AI Chat Application with Clean Architecture",
+  "main": "index.js",
+  "scripts": {
+    "start": "NODE_ENV=production node start.js --prod",
+    "dev": "NODE_ENV=development LLM_ENDPOINT=http://192.168.178.182:1234/v1/chat/completions LLM_MODEL=meta-llama-3.1-8b-instruct node start.js --dev",
+    "test": "NODE_ENV=test node tests/run-all-tests.js",
+    "test:unit": "NODE_ENV=test node tests/run-all-tests.js --type=unit",
+    "test:integration": "NODE_ENV=test node tests/run-all-tests.js --type=integration", 
+    "test:e2e": "NODE_ENV=test node tests/run-all-tests.js --type=e2e",
+    "test:generate": "node tests/generate-tests.js",
+    "test:verbose": "NODE_ENV=test TEST_VERBOSE=true node tests/run-all-tests.js",
+    "test:watch": "NODE_ENV=test TEST_WATCH=true node tests/run-all-tests.js",
+    "setup": "node setupServices.js",
+    "validate": "node validate-services.js",
+    "health": "node -e \"require('./setupServices').checkServicesHealth().then(h => console.log(JSON.stringify(h, null, 2)))\""
+  },
+  "keywords": ["ai", "chat", "clean-architecture", "psychology", "conversation"],
+  "author": "Aria AI Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
   "dependencies": {
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "sqlite3": "^5.1.7",
+    "uuid": "^11.1.0"
   }
 }

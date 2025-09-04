@@ -18,6 +18,7 @@ You are building an AI chat application with **strict clean architecture**. Foll
 - **Files prefixed with `CORE_`** = Foundation services, DO NOT TOUCH
 - **If CORE_ functionality insufficient** = Extend or compose, don't modify
 - **Ask human before suggesting changes** to any CORE_ file
+- **Do not create any derived classes of core classes as workaround!**
 
 Examples of protected files:
 - `CORE_LoggerService.js`, `CORE_PsychologyService.js`, `CORE_DataAccessLayer.js`
@@ -27,6 +28,7 @@ Examples of protected files:
 - Repository method doesn't exist for required operation  
 - Unsure if functionality already exists in psychology/structuredResponse
 - Complex database schema changes needed
+- Any architectural design decisions
 
 ## ✅ MANDATORY PATTERNS
 
