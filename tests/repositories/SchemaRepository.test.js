@@ -1,163 +1,101 @@
-#!/usr/bin/env node
-
 /**
  * Unit Tests for SchemaRepository
  * 
  * CLEAN ARCHITECTURE TESTING:
- * - Test repository creation and inheritance
- * - Test all CRUD operations with proper validation
- * - Test multi-user support and data isolation
+ * - Test database schema management
+ * - Test basic repository operations
+ * - Test database access patterns
  * - Mock database dependencies for isolated testing
- * - Verify proper error handling
  */
 
-const SchemaRepository = require('../../backend/dal/repositories/CORE_SchemaRepository.js');
-const { ArchitectureAssertions } = require('../test-framework');
+const SchemaRepository = require('../../backend/dal/repositories/CORE_SchemaRepository');
 
-class SimpleTest {
-    constructor(name) {
-        this.name = name;
-        this.tests = [];
-        this.passed = 0;
-        this.failed = 0;
-    }
-
-    test(description, testFunction) {
-        this.tests.push({ description, testFunction });
-    }
-
-    async run() {
-        console.log(`\n🧪 ${this.name}`);
-        console.log('='.repeat(this.name.length + 4));
-        
-        for (const { description, testFunction } of this.tests) {
-            try {
-                await testFunction();
-                console.log(`  ✅ ${description}`);
-                this.passed++;
-            } catch (error) {
-                console.log(`  ❌ ${description}`);
-                console.log(`     Error: ${error.message}`);
-                this.failed++;
-            }
-        }
-        
-        const total = this.passed + this.failed;
-        console.log(`\n📊 Results: ${this.passed}/${total} passed`);
-        
-        return this.failed === 0;
-    }
-}
-
-// Helper functions
-function createMockDependencies() {
-    return {
-        logger: {
-            info: () => {},
-            debug: () => {},
-            warn: () => {},
-            error: () => {}
-        },
-        errorHandling: {
-            wrapRepositoryError: (error, message, context) => {
-                const wrappedError = new Error(`${message}: ${error.message}`);
-                wrappedError.context = context;
-                return wrappedError;
-            }
-        },
-        dbAccess: {
-            queryOne: () => Promise.resolve(null),
-            queryAll: () => Promise.resolve([]),
-            run: () => Promise.resolve({ changes: 1 })
-        }
-    };
-}
-
-async function runSchemaRepositoryTests() {
-    const suite = new SimpleTest('SchemaRepository Unit Tests');
-    let repository;
+describe('SchemaRepository', () => {
+    let schemaRepo;
     let mockDeps;
 
-    // Setup before each test
-    function setup() {
+    beforeEach(() => {
         mockDeps = createMockDependencies();
-        repository = new SchemaRepository('schema_versions', mockDeps);
-    }
-
-    // CLEAN ARCHITECTURE: Test repository creation and inheritance
-    suite.test('should extend BaseRepository', () => {
-        setup();
-        ArchitectureAssertions.assertExtendsBaseRepository(repository);
+        schemaRepo = new SchemaRepository('schema_versions', mockDeps);
     });
 
-    suite.test('should have correct table name', () => {
-        setup();
-        if (repository.tableName !== 'schema_versions') {
-            throw new Error(`Expected table name 'schema_versions', got '${repository.tableName}'`);
-        }
-    });
-
-    suite.test('should implement required repository interface', () => {
-        setup();
-        ArchitectureAssertions.assertRepositoryInterface(repository);
-    });
-
-    // CLEAN ARCHITECTURE: Test basic CRUD operations
-    suite.test('should support count operations', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.resolve({ count: 5 });
-        
-        const count = await repository.count();
-        
-        if (count !== 5) {
-            throw new Error('count() should return correct count');
-        }
-    });
-
-    suite.test('should support findById operations', async () => {
-        setup();
-        const mockRecord = { id: 'test-id', name: 'test' };
-        mockDeps.dbAccess.queryOne = () => Promise.resolve(mockRecord);
-        
-        const result = await repository.findById('test-id');
-        
-        if (!result || result.id !== 'test-id') {
-            throw new Error('findById should return correct record');
-        }
-    });
-
-    // CLEAN ARCHITECTURE: Test error handling
-    suite.test('should handle database errors gracefully', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.reject(new Error('Database connection failed'));
-        
-        try {
-            await repository.findById('test-id');
-            throw new Error('Should have thrown an error');
-        } catch (error) {
-            if (!error.message.includes('Failed to find')) {
-                throw new Error('Should wrap database errors with context');
-            }
-        }
-    });
-
-    // TODO: Add specific tests for SchemaRepository domain methods
-    // TODO: Add multi-user support tests if applicable
-    // TODO: Add business logic validation tests
-
-    return await suite.run();
-}
-
-// Run tests if called directly
-if (require.main === module) {
-    runSchemaRepositoryTests()
-        .then(success => {
-            process.exit(success ? 0 : 1);
-        })
-        .catch(error => {
-            console.error('❌ Test execution failed:', error.message);
-            process.exit(1);
+    describe('Architecture Compliance', () => {
+        test('should extend BaseRepository', () => {
+            expect(schemaRepo.constructor.name).toBe('SchemaRepository');
+            expect(schemaRepo.tableName).toBe('schema_versions');
+            expect(schemaRepo.dal).toBeDefined();
+            expect(schemaRepo.logger).toBeDefined();
+            expect(schemaRepo.errorHandler).toBeDefined();
         });
-}
 
-module.exports = { runSchemaRepositoryTests };
+        test('should implement required repository interface', () => {
+            const requiredMethods = ['count', 'findById', 'create', 'update', 'delete'];
+            requiredMethods.forEach(method => {
+                expect(typeof schemaRepo[method]).toBe('function');
+            });
+        });
+
+        test('should have getCurrentVersion method', () => {
+            expect(typeof schemaRepo.getCurrentVersion).toBe('function');
+        });
+    });
+
+    describe('Schema Management Operations', () => {
+        test('should get current schema version', async () => {
+            const mockVersion = { version: '1.0.5', applied_at: '2024-01-01' };
+            mockDeps.dal.queryOne.mockResolvedValue(mockVersion);
+
+            const result = await schemaRepo.getCurrentVersion();
+
+            expect(result).toEqual(mockVersion);
+            expect(mockDeps.dal.queryOne).toHaveBeenCalledWith(
+                expect.stringContaining('ORDER BY version DESC'),
+                []
+            );
+        });
+    });
+
+    describe('Basic Repository Operations', () => {
+        test('should create schema version record', async () => {
+            const mockVersion = {
+                id: 'ver-1',
+                version: '1.0.6',
+                description: 'Add user preferences table'
+            };
+            mockDeps.dal.create.mockResolvedValue(mockVersion);
+
+            const result = await schemaRepo.create(mockVersion);
+
+            expect(result).toEqual(mockVersion);
+            expect(mockDeps.dal.create).toHaveBeenCalledWith('schema_versions', mockVersion);
+        });
+
+        test('should count schema versions', async () => {
+            mockDeps.dal.count.mockResolvedValue(5);
+
+            const result = await schemaRepo.count();
+
+            expect(result).toBe(5);
+            expect(mockDeps.dal.count).toHaveBeenCalledWith('schema_versions', {});
+        });
+
+        test('should find schema version by id', async () => {
+            const mockVersion = { id: 'ver-1', version: '1.0.5' };
+            mockDeps.dal.findById.mockResolvedValue(mockVersion);
+
+            const result = await schemaRepo.findById('ver-1');
+
+            expect(result).toEqual(mockVersion);
+            expect(mockDeps.dal.findById).toHaveBeenCalledWith('schema_versions', 'ver-1');
+        });
+    });
+
+    describe('Error Handling', () => {
+        test('should handle database errors gracefully', async () => {
+            const dbError = new Error('Database connection failed');
+            mockDeps.dal.queryOne.mockRejectedValue(dbError);
+
+            await expect(schemaRepo.getCurrentVersion()).rejects.toThrow();
+        });
+    });
+});

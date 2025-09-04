@@ -1,163 +1,107 @@
-#!/usr/bin/env node
-
 /**
  * Unit Tests for ProactiveRepository
  * 
  * CLEAN ARCHITECTURE TESTING:
- * - Test repository creation and inheritance
- * - Test all CRUD operations with proper validation
- * - Test multi-user support and data isolation
+ * - Test proactive intelligence data management
+ * - Test engagement history operations
+ * - Test learning pattern tracking
  * - Mock database dependencies for isolated testing
- * - Verify proper error handling
  */
 
-const ProactiveRepository = require('../../backend/dal/repositories/CORE_ProactiveRepository.js');
-const { ArchitectureAssertions } = require('../test-framework');
+const ProactiveRepository = require('../../backend/dal/repositories/CORE_ProactiveRepository');
 
-class SimpleTest {
-    constructor(name) {
-        this.name = name;
-        this.tests = [];
-        this.passed = 0;
-        this.failed = 0;
-    }
-
-    test(description, testFunction) {
-        this.tests.push({ description, testFunction });
-    }
-
-    async run() {
-        console.log(`\n🧪 ${this.name}`);
-        console.log('='.repeat(this.name.length + 4));
-        
-        for (const { description, testFunction } of this.tests) {
-            try {
-                await testFunction();
-                console.log(`  ✅ ${description}`);
-                this.passed++;
-            } catch (error) {
-                console.log(`  ❌ ${description}`);
-                console.log(`     Error: ${error.message}`);
-                this.failed++;
-            }
-        }
-        
-        const total = this.passed + this.failed;
-        console.log(`\n📊 Results: ${this.passed}/${total} passed`);
-        
-        return this.failed === 0;
-    }
-}
-
-// Helper functions
-function createMockDependencies() {
-    return {
-        logger: {
-            info: () => {},
-            debug: () => {},
-            warn: () => {},
-            error: () => {}
-        },
-        errorHandling: {
-            wrapRepositoryError: (error, message, context) => {
-                const wrappedError = new Error(`${message}: ${error.message}`);
-                wrappedError.context = context;
-                return wrappedError;
-            }
-        },
-        dbAccess: {
-            queryOne: () => Promise.resolve(null),
-            queryAll: () => Promise.resolve([]),
-            run: () => Promise.resolve({ changes: 1 })
-        }
-    };
-}
-
-async function runProactiveRepositoryTests() {
-    const suite = new SimpleTest('ProactiveRepository Unit Tests');
-    let repository;
+describe('ProactiveRepository', () => {
+    let proactiveRepo;
     let mockDeps;
 
-    // Setup before each test
-    function setup() {
+    beforeEach(() => {
         mockDeps = createMockDependencies();
-        repository = new ProactiveRepository('proactive_engagements', mockDeps);
-    }
-
-    // CLEAN ARCHITECTURE: Test repository creation and inheritance
-    suite.test('should extend BaseRepository', () => {
-        setup();
-        ArchitectureAssertions.assertExtendsBaseRepository(repository);
+        proactiveRepo = new ProactiveRepository('proactive', mockDeps);
     });
 
-    suite.test('should have correct table name', () => {
-        setup();
-        if (repository.tableName !== 'proactive_engagements') {
-            throw new Error(`Expected table name 'proactive_engagements', got '${repository.tableName}'`);
-        }
-    });
-
-    suite.test('should implement required repository interface', () => {
-        setup();
-        ArchitectureAssertions.assertRepositoryInterface(repository);
-    });
-
-    // CLEAN ARCHITECTURE: Test basic CRUD operations
-    suite.test('should support count operations', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.resolve({ count: 5 });
-        
-        const count = await repository.count();
-        
-        if (count !== 5) {
-            throw new Error('count() should return correct count');
-        }
-    });
-
-    suite.test('should support findById operations', async () => {
-        setup();
-        const mockRecord = { id: 'test-id', name: 'test' };
-        mockDeps.dbAccess.queryOne = () => Promise.resolve(mockRecord);
-        
-        const result = await repository.findById('test-id');
-        
-        if (!result || result.id !== 'test-id') {
-            throw new Error('findById should return correct record');
-        }
-    });
-
-    // CLEAN ARCHITECTURE: Test error handling
-    suite.test('should handle database errors gracefully', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.reject(new Error('Database connection failed'));
-        
-        try {
-            await repository.findById('test-id');
-            throw new Error('Should have thrown an error');
-        } catch (error) {
-            if (!error.message.includes('Failed to find')) {
-                throw new Error('Should wrap database errors with context');
-            }
-        }
-    });
-
-    // TODO: Add specific tests for ProactiveRepository domain methods
-    // TODO: Add multi-user support tests if applicable
-    // TODO: Add business logic validation tests
-
-    return await suite.run();
-}
-
-// Run tests if called directly
-if (require.main === module) {
-    runProactiveRepositoryTests()
-        .then(success => {
-            process.exit(success ? 0 : 1);
-        })
-        .catch(error => {
-            console.error('❌ Test execution failed:', error.message);
-            process.exit(1);
+    describe('Architecture Compliance', () => {
+        test('should extend BaseRepository', () => {
+            expect(proactiveRepo.constructor.name).toBe('ProactiveRepository');
+            expect(proactiveRepo.tableName).toBe('proactive');
+            expect(proactiveRepo.dal).toBeDefined();
+            expect(proactiveRepo.logger).toBeDefined();
+            expect(proactiveRepo.errorHandler).toBeDefined();
         });
-}
 
-module.exports = { runProactiveRepositoryTests };
+        test('should implement required repository interface', () => {
+            const requiredMethods = ['count', 'findById', 'create', 'update', 'delete'];
+            requiredMethods.forEach(method => {
+                expect(typeof proactiveRepo[method]).toBe('function');
+            });
+        });
+
+        test('should implement proactive-specific methods', () => {
+            const proactiveMethods = [
+                'getEngagementHistory',
+                'getLearningPatterns',
+                'getTimingOptimizations'
+            ];
+            proactiveMethods.forEach(method => {
+                expect(typeof proactiveRepo[method]).toBe('function');
+            });
+        });
+    });
+
+    describe('Multi-User Proactive Operations', () => {
+        test('should get engagement history with user isolation', async () => {
+            const mockHistory = [
+                { id: 1, user_id: 'user-123', engagement_type: 'proactive_message', timestamp: '2024-01-01' }
+            ];
+            mockDeps.dal.query.mockResolvedValue(mockHistory);
+
+            const result = await proactiveRepo.getEngagementHistory('user-123', 10);
+
+            expect(result).toEqual(mockHistory);
+            expect(mockDeps.dal.query).toHaveBeenCalledWith(
+                expect.stringContaining('user_id = ?'),
+                ['user-123', 10]
+            );
+        });
+
+        test('should get learning patterns with proper filtering', async () => {
+            const mockPatterns = [
+                { id: 1, user_id: 'user-123', pattern_type: 'response_time', data: '{}' }
+            ];
+            mockDeps.dal.query.mockResolvedValue(mockPatterns);
+
+            const result = await proactiveRepo.getLearningPatterns('user-123', 20);
+
+            expect(result).toEqual(mockPatterns);
+            expect(mockDeps.dal.query).toHaveBeenCalledWith(
+                expect.stringContaining('user_id = ?'),
+                ['user-123', 20, 50]
+            );
+        });
+
+        test('should get timing optimizations with user scope', async () => {
+            const mockOptimizations = [
+                { id: 1, user_id: 'user-123', optimization_type: 'best_time', value: 14.5 }
+            ];
+            mockDeps.dal.query.mockResolvedValue(mockOptimizations);
+
+            const result = await proactiveRepo.getTimingOptimizations('user-123', 15);
+
+            expect(result).toEqual(mockOptimizations);
+            expect(mockDeps.dal.query).toHaveBeenCalledWith(
+                expect.stringContaining('user_id = ?'),
+                ['user-123', 15]
+            );
+        });
+    });
+
+    describe('Error Handling', () => {
+        test('should handle database errors gracefully', async () => {
+            const dbError = new Error('Database connection failed');
+            mockDeps.dal.query.mockRejectedValue(dbError);
+
+            await expect(
+                proactiveRepo.getEngagementHistory('user-123', 10)
+            ).rejects.toThrow();
+        });
+    });
+});

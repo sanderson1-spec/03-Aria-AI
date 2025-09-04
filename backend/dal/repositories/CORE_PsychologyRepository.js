@@ -94,8 +94,8 @@ class PsychologyRepository extends BaseRepository {
         try {
             const sql = `
                 SELECT * FROM psychology_evolution_log 
-                WHERE user_id = ? AND character_id = ?
-                ORDER BY timestamp DESC
+                WHERE user_id = ? AND personality_id = ?
+                ORDER BY created_at DESC
                 LIMIT ?
             `;
             return await this.dal.query(sql, [userId, characterId, limit]);

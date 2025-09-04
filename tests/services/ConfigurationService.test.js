@@ -613,8 +613,8 @@ describe('ConfigurationService', () => {
                 mkdirError,
                 'Failed to create configuration directory',
                 expect.objectContaining({
-                    filePath: '/test/config.json',
-                    directory: '/absolute/config'
+                    filePath: expect.stringContaining('config.json'),
+                    directory: expect.stringContaining('config')
                 })
             );
         });

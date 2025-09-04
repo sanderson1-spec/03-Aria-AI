@@ -168,16 +168,17 @@ async function runSimpleTestDemo() {
         
         const dal = serviceFactory.services.get('database').getDAL();
         
-        // Create two users
+        // Create two users with unique identifiers
+        const timestamp = Date.now();
         const user1 = await dal.users.createUser({
-            username: 'testuser1',
-            email: 'user1@test.com',
+            username: `testuser1_${timestamp}`,
+            email: `user1_${timestamp}@test.com`,
             display_name: 'Test User 1'
         });
         
         const user2 = await dal.users.createUser({
-            username: 'testuser2', 
-            email: 'user2@test.com',
+            username: `testuser2_${timestamp}`,
+            email: `user2_${timestamp}@test.com`,
             display_name: 'Test User 2'
         });
         

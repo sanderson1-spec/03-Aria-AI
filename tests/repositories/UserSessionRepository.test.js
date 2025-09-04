@@ -1,163 +1,93 @@
-#!/usr/bin/env node
-
 /**
  * Unit Tests for UserSessionRepository
  * 
  * CLEAN ARCHITECTURE TESTING:
- * - Test repository creation and inheritance
- * - Test all CRUD operations with proper validation
- * - Test multi-user support and data isolation
+ * - Test user session management
+ * - Test session lifecycle operations
+ * - Test multi-user session isolation
  * - Mock database dependencies for isolated testing
- * - Verify proper error handling
  */
 
-const UserSessionRepository = require('../../backend/dal/repositories/CORE_UserSessionRepository.js');
-const { ArchitectureAssertions } = require('../test-framework');
+const UserSessionRepository = require('../../backend/dal/repositories/CORE_UserSessionRepository');
 
-class SimpleTest {
-    constructor(name) {
-        this.name = name;
-        this.tests = [];
-        this.passed = 0;
-        this.failed = 0;
-    }
-
-    test(description, testFunction) {
-        this.tests.push({ description, testFunction });
-    }
-
-    async run() {
-        console.log(`\n🧪 ${this.name}`);
-        console.log('='.repeat(this.name.length + 4));
-        
-        for (const { description, testFunction } of this.tests) {
-            try {
-                await testFunction();
-                console.log(`  ✅ ${description}`);
-                this.passed++;
-            } catch (error) {
-                console.log(`  ❌ ${description}`);
-                console.log(`     Error: ${error.message}`);
-                this.failed++;
-            }
-        }
-        
-        const total = this.passed + this.failed;
-        console.log(`\n📊 Results: ${this.passed}/${total} passed`);
-        
-        return this.failed === 0;
-    }
-}
-
-// Helper functions
-function createMockDependencies() {
-    return {
-        logger: {
-            info: () => {},
-            debug: () => {},
-            warn: () => {},
-            error: () => {}
-        },
-        errorHandling: {
-            wrapRepositoryError: (error, message, context) => {
-                const wrappedError = new Error(`${message}: ${error.message}`);
-                wrappedError.context = context;
-                return wrappedError;
-            }
-        },
-        dbAccess: {
-            queryOne: () => Promise.resolve(null),
-            queryAll: () => Promise.resolve([]),
-            run: () => Promise.resolve({ changes: 1 })
-        }
-    };
-}
-
-async function runUserSessionRepositoryTests() {
-    const suite = new SimpleTest('UserSessionRepository Unit Tests');
-    let repository;
+describe('UserSessionRepository', () => {
+    let userSessionRepo;
     let mockDeps;
 
-    // Setup before each test
-    function setup() {
+    beforeEach(() => {
         mockDeps = createMockDependencies();
-        repository = new UserSessionRepository('user_sessions', mockDeps);
-    }
-
-    // CLEAN ARCHITECTURE: Test repository creation and inheritance
-    suite.test('should extend BaseRepository', () => {
-        setup();
-        ArchitectureAssertions.assertExtendsBaseRepository(repository);
+        userSessionRepo = new UserSessionRepository('user_sessions', mockDeps);
     });
 
-    suite.test('should have correct table name', () => {
-        setup();
-        if (repository.tableName !== 'user_sessions') {
-            throw new Error(`Expected table name 'user_sessions', got '${repository.tableName}'`);
-        }
-    });
-
-    suite.test('should implement required repository interface', () => {
-        setup();
-        ArchitectureAssertions.assertRepositoryInterface(repository);
-    });
-
-    // CLEAN ARCHITECTURE: Test basic CRUD operations
-    suite.test('should support count operations', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.resolve({ count: 5 });
-        
-        const count = await repository.count();
-        
-        if (count !== 5) {
-            throw new Error('count() should return correct count');
-        }
-    });
-
-    suite.test('should support findById operations', async () => {
-        setup();
-        const mockRecord = { id: 'test-id', name: 'test' };
-        mockDeps.dbAccess.queryOne = () => Promise.resolve(mockRecord);
-        
-        const result = await repository.findById('test-id');
-        
-        if (!result || result.id !== 'test-id') {
-            throw new Error('findById should return correct record');
-        }
-    });
-
-    // CLEAN ARCHITECTURE: Test error handling
-    suite.test('should handle database errors gracefully', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.reject(new Error('Database connection failed'));
-        
-        try {
-            await repository.findById('test-id');
-            throw new Error('Should have thrown an error');
-        } catch (error) {
-            if (!error.message.includes('Failed to find')) {
-                throw new Error('Should wrap database errors with context');
-            }
-        }
-    });
-
-    // TODO: Add specific tests for UserSessionRepository domain methods
-    // TODO: Add multi-user support tests if applicable
-    // TODO: Add business logic validation tests
-
-    return await suite.run();
-}
-
-// Run tests if called directly
-if (require.main === module) {
-    runUserSessionRepositoryTests()
-        .then(success => {
-            process.exit(success ? 0 : 1);
-        })
-        .catch(error => {
-            console.error('❌ Test execution failed:', error.message);
-            process.exit(1);
+    describe('Architecture Compliance', () => {
+        test('should extend BaseRepository', () => {
+            expect(userSessionRepo.constructor.name).toBe('UserSessionRepository');
+            expect(userSessionRepo.tableName).toBe('user_sessions');
+            expect(userSessionRepo.dal).toBeDefined();
+            expect(userSessionRepo.logger).toBeDefined();
+            expect(userSessionRepo.errorHandler).toBeDefined();
         });
-}
 
-module.exports = { runUserSessionRepositoryTests };
+        test('should implement required repository interface', () => {
+            const requiredMethods = ['count', 'findById', 'create', 'update', 'delete'];
+            requiredMethods.forEach(method => {
+                expect(typeof userSessionRepo[method]).toBe('function');
+            });
+        });
+
+        test('should implement base repository methods', () => {
+            // Test only what we know exists from BaseRepository
+            expect(typeof userSessionRepo.create).toBe('function');
+            expect(typeof userSessionRepo.findById).toBe('function');
+            expect(typeof userSessionRepo.update).toBe('function');
+            expect(typeof userSessionRepo.delete).toBe('function');
+        });
+    });
+
+    describe('Basic Repository Operations', () => {
+        test('should create user session record', async () => {
+            const mockSession = {
+                id: 'session-1',
+                user_id: 'user-123',
+                session_token: 'token-abc',
+                is_active: 1
+            };
+            mockDeps.dal.create.mockResolvedValue(mockSession);
+
+            const result = await userSessionRepo.create(mockSession);
+
+            expect(result).toEqual(mockSession);
+            expect(mockDeps.dal.create).toHaveBeenCalledWith('user_sessions', mockSession);
+        });
+
+        test('should find session by id', async () => {
+            const mockSession = { id: 'session-1', user_id: 'user-123' };
+            mockDeps.dal.findById.mockResolvedValue(mockSession);
+
+            const result = await userSessionRepo.findById('session-1');
+
+            expect(result).toEqual(mockSession);
+            expect(mockDeps.dal.findById).toHaveBeenCalledWith('user_sessions', 'session-1');
+        });
+
+        test('should count sessions', async () => {
+            mockDeps.dal.count.mockResolvedValue(5);
+
+            const result = await userSessionRepo.count();
+
+            expect(result).toBe(5);
+            expect(mockDeps.dal.count).toHaveBeenCalledWith('user_sessions', {});
+        });
+    });
+
+    describe('Error Handling', () => {
+        test('should handle database errors gracefully', async () => {
+            const dbError = new Error('Database connection failed');
+            mockDeps.dal.findById.mockRejectedValue(dbError);
+
+            await expect(
+                userSessionRepo.findById('session-1')
+            ).rejects.toThrow();
+        });
+    });
+});

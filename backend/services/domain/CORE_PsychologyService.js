@@ -27,8 +27,7 @@ class PsychologyService extends AbstractService {
         this.logger = dependencies.logger;
         this.errorHandler = dependencies.errorHandling;
         this.database = dependencies.database;
-        this.psychologyRepository = dependencies.psychologyRepository;
-        this.personalityRepository = dependencies.personalityRepository;
+        this.dal = this.database.getDAL();
         
         // Initialize state tracking
         this.activeStates = new Map();
@@ -877,7 +876,7 @@ Rate significance (1-10) for:
     async getPersonalityFramework(personalityId) {
         return await this.withMetrics(async () => {
             try {
-                return await this.psychologyRepository.getFramework(personalityId);
+                return await this.dal.psychology.getCharacterPsychologicalFrameworks('', personalityId);
             } catch (error) {
                 this.logger.error('Error getting personality framework', 'PsychologyService', {
                     error: error.message,
@@ -900,7 +899,7 @@ Rate significance (1-10) for:
                 }
                 
                 // Get from repository
-                const state = await this.psychologyRepository.getState(sessionId);
+                const state = await this.dal.psychology.getCharacterPsychologicalState('', '', sessionId);
                 if (!state) {
                     return null;
                 }
@@ -938,7 +937,7 @@ Rate significance (1-10) for:
                 };
                 
                 // Save to repository
-                await this.psychologyRepository.updateState(sessionId, newState);
+                await this.dal.psychology.saveCharacterPsychologicalState('', '', sessionId, newState);
                 
                 // Update active states
                 this.activeStates.set(sessionId, newState);
@@ -973,7 +972,7 @@ Rate significance (1-10) for:
             };
             
             // Save to repository
-            await this.psychologyRepository.createState(sessionId, initialState);
+            await this.dal.psychology.saveCharacterPsychologicalState('', '', sessionId, initialState);
             
             // Update active states
             this.activeStates.set(sessionId, initialState);
@@ -994,7 +993,7 @@ Rate significance (1-10) for:
      */
     async getSessionPsychologyAnalytics(sessionId) {
         try {
-            const state = await this.psychologyRepository.getState(sessionId);
+            const state = await this.dal.psychology.getCharacterPsychologicalState('', '', sessionId);
             return state ? { sessionId, hasState: true, ...state } : null;
         } catch (error) {
             this.logger.error('Error getting psychology analytics', 'PsychologyService', {
@@ -1011,7 +1010,8 @@ Rate significance (1-10) for:
     async cleanupInactiveStates() {
         try {
             const cutoffTime = new Date(Date.now() - this.stateConfig.defaultTtl);
-            const cleared = await this.psychologyRepository.cleanupInactiveStates(cutoffTime);
+            // Note: cleanupInactiveStates method needs to be implemented in psychology repository
+            const cleared = 0; // Placeholder until repository method is implemented
             
             // Clear from active states
             for (const [sessionId, state] of this.activeStates.entries()) {

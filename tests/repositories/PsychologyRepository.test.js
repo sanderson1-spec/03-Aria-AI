@@ -1,163 +1,109 @@
-#!/usr/bin/env node
-
 /**
  * Unit Tests for PsychologyRepository
  * 
  * CLEAN ARCHITECTURE TESTING:
- * - Test repository creation and inheritance
- * - Test all CRUD operations with proper validation
- * - Test multi-user support and data isolation
+ * - Test psychology framework and state management
+ * - Test multi-user psychological data isolation
+ * - Test character-specific psychology operations
  * - Mock database dependencies for isolated testing
- * - Verify proper error handling
  */
 
-const PsychologyRepository = require('../../backend/dal/repositories/CORE_PsychologyRepository.js');
-const { ArchitectureAssertions } = require('../test-framework');
+const PsychologyRepository = require('../../backend/dal/repositories/CORE_PsychologyRepository');
 
-class SimpleTest {
-    constructor(name) {
-        this.name = name;
-        this.tests = [];
-        this.passed = 0;
-        this.failed = 0;
-    }
-
-    test(description, testFunction) {
-        this.tests.push({ description, testFunction });
-    }
-
-    async run() {
-        console.log(`\n🧪 ${this.name}`);
-        console.log('='.repeat(this.name.length + 4));
-        
-        for (const { description, testFunction } of this.tests) {
-            try {
-                await testFunction();
-                console.log(`  ✅ ${description}`);
-                this.passed++;
-            } catch (error) {
-                console.log(`  ❌ ${description}`);
-                console.log(`     Error: ${error.message}`);
-                this.failed++;
-            }
-        }
-        
-        const total = this.passed + this.failed;
-        console.log(`\n📊 Results: ${this.passed}/${total} passed`);
-        
-        return this.failed === 0;
-    }
-}
-
-// Helper functions
-function createMockDependencies() {
-    return {
-        logger: {
-            info: () => {},
-            debug: () => {},
-            warn: () => {},
-            error: () => {}
-        },
-        errorHandling: {
-            wrapRepositoryError: (error, message, context) => {
-                const wrappedError = new Error(`${message}: ${error.message}`);
-                wrappedError.context = context;
-                return wrappedError;
-            }
-        },
-        dbAccess: {
-            queryOne: () => Promise.resolve(null),
-            queryAll: () => Promise.resolve([]),
-            run: () => Promise.resolve({ changes: 1 })
-        }
-    };
-}
-
-async function runPsychologyRepositoryTests() {
-    const suite = new SimpleTest('PsychologyRepository Unit Tests');
-    let repository;
+describe('PsychologyRepository', () => {
+    let psychologyRepo;
     let mockDeps;
 
-    // Setup before each test
-    function setup() {
+    beforeEach(() => {
         mockDeps = createMockDependencies();
-        repository = new PsychologyRepository('psychology_frameworks', mockDeps);
-    }
-
-    // CLEAN ARCHITECTURE: Test repository creation and inheritance
-    suite.test('should extend BaseRepository', () => {
-        setup();
-        ArchitectureAssertions.assertExtendsBaseRepository(repository);
+        psychologyRepo = new PsychologyRepository('psychology', mockDeps);
     });
 
-    suite.test('should have correct table name', () => {
-        setup();
-        if (repository.tableName !== 'psychology_frameworks') {
-            throw new Error(`Expected table name 'psychology_frameworks', got '${repository.tableName}'`);
-        }
-    });
-
-    suite.test('should implement required repository interface', () => {
-        setup();
-        ArchitectureAssertions.assertRepositoryInterface(repository);
-    });
-
-    // CLEAN ARCHITECTURE: Test basic CRUD operations
-    suite.test('should support count operations', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.resolve({ count: 5 });
-        
-        const count = await repository.count();
-        
-        if (count !== 5) {
-            throw new Error('count() should return correct count');
-        }
-    });
-
-    suite.test('should support findById operations', async () => {
-        setup();
-        const mockRecord = { id: 'test-id', name: 'test' };
-        mockDeps.dbAccess.queryOne = () => Promise.resolve(mockRecord);
-        
-        const result = await repository.findById('test-id');
-        
-        if (!result || result.id !== 'test-id') {
-            throw new Error('findById should return correct record');
-        }
-    });
-
-    // CLEAN ARCHITECTURE: Test error handling
-    suite.test('should handle database errors gracefully', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.reject(new Error('Database connection failed'));
-        
-        try {
-            await repository.findById('test-id');
-            throw new Error('Should have thrown an error');
-        } catch (error) {
-            if (!error.message.includes('Failed to find')) {
-                throw new Error('Should wrap database errors with context');
-            }
-        }
-    });
-
-    // TODO: Add specific tests for PsychologyRepository domain methods
-    // TODO: Add multi-user support tests if applicable
-    // TODO: Add business logic validation tests
-
-    return await suite.run();
-}
-
-// Run tests if called directly
-if (require.main === module) {
-    runPsychologyRepositoryTests()
-        .then(success => {
-            process.exit(success ? 0 : 1);
-        })
-        .catch(error => {
-            console.error('❌ Test execution failed:', error.message);
-            process.exit(1);
+    describe('Architecture Compliance', () => {
+        test('should extend BaseRepository', () => {
+            expect(psychologyRepo.constructor.name).toBe('PsychologyRepository');
+            expect(psychologyRepo.tableName).toBe('psychology');
+            expect(psychologyRepo.dal).toBeDefined();
+            expect(psychologyRepo.logger).toBeDefined();
+            expect(psychologyRepo.errorHandler).toBeDefined();
         });
-}
 
-module.exports = { runPsychologyRepositoryTests };
+        test('should implement required repository interface', () => {
+            const requiredMethods = ['count', 'findById', 'create', 'update', 'delete'];
+            requiredMethods.forEach(method => {
+                expect(typeof psychologyRepo[method]).toBe('function');
+            });
+        });
+
+        test('should implement psychology-specific methods', () => {
+            const psychologyMethods = [
+                'getCharacterPsychologicalFrameworks',
+                'getCharacterPsychologicalState',
+                'saveCharacterPsychologicalState',
+                'getPsychologyEvolutionLog',
+                'logPsychologyEvolution'
+            ];
+            psychologyMethods.forEach(method => {
+                expect(typeof psychologyRepo[method]).toBe('function');
+            });
+        });
+    });
+
+    describe('Multi-User Psychology Operations', () => {
+        test('should get character psychological frameworks with user isolation', async () => {
+            const mockFrameworks = [
+                { id: 1, personality_id: 'char-1', framework_data: '{}' }
+            ];
+            mockDeps.dal.query.mockResolvedValue(mockFrameworks);
+
+            const result = await psychologyRepo.getCharacterPsychologicalFrameworks('user-123', 'char-1');
+
+            expect(result).toEqual(mockFrameworks);
+            expect(mockDeps.dal.query).toHaveBeenCalledWith(
+                expect.stringContaining('personality_id = ?'),
+                ['char-1']
+            );
+        });
+
+        test('should save character psychological state with proper data structure', async () => {
+            const mockState = {
+                emotional_state: { mood: 'happy' },
+                cognitive_patterns: { focus: 'high' }
+            };
+            mockDeps.dal.execute.mockResolvedValue({ changes: 1 });
+
+            await psychologyRepo.saveCharacterPsychologicalState('user-123', 'char-1', 'session-1', mockState);
+
+            expect(mockDeps.dal.execute).toHaveBeenCalledWith(
+                expect.stringContaining('INSERT OR REPLACE'),
+                expect.arrayContaining(['user-123', 'char-1'])
+            );
+        });
+
+        test('should get psychology evolution log with proper ordering', async () => {
+            const mockLog = [
+                { id: 1, personality_id: 'char-1', created_at: '2024-01-01' }
+            ];
+            mockDeps.dal.query.mockResolvedValue(mockLog);
+
+            const result = await psychologyRepo.getPsychologyEvolutionLog('user-123', 'char-1', 10);
+
+            expect(result).toEqual(mockLog);
+            expect(mockDeps.dal.query).toHaveBeenCalledWith(
+                expect.stringContaining('ORDER BY created_at DESC'),
+                ['user-123', 'char-1', 10]
+            );
+        });
+    });
+
+    describe('Error Handling', () => {
+        test('should handle database errors gracefully', async () => {
+            const dbError = new Error('Database connection failed');
+            mockDeps.dal.query.mockRejectedValue(dbError);
+
+            await expect(
+                psychologyRepo.getCharacterPsychologicalFrameworks('user-123', 'char-1')
+            ).rejects.toThrow();
+        });
+    });
+});

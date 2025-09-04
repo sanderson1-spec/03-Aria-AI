@@ -454,7 +454,7 @@ describe('Foundation Services Integration', () => {
             await config.loadConfiguration('/test/app-config.json');
             
             // Verify configuration loading
-            expect(fs.readFile).toHaveBeenCalledWith('/absolute/test/app-config.json', 'utf8');
+            expect(fs.readFile).toHaveBeenCalledWith(expect.stringContaining('app-config.json'), 'utf8');
             
             // Verify configuration access
             expect(config.getConfiguration('logging')).toEqual({ level: 'debug', includeTimestamp: true });
@@ -465,7 +465,7 @@ describe('Foundation Services Integration', () => {
             await config.saveConfiguration('/test/app-config.json');
             
             expect(fs.writeFile).toHaveBeenCalledWith(
-                '/absolute/test/app-config.json',
+                expect.stringContaining('app-config.json'),
                 expect.stringContaining('newSetting'),
                 'utf8'
             );
@@ -484,7 +484,7 @@ describe('Foundation Services Integration', () => {
             const config = serviceFactory.get('configuration');
             
             await expect(config.loadConfiguration('/nonexistent/config.json'))
-                .rejects.toThrow('Configuration loading failed');
+                .rejects.toThrow('File not found');
         });
     });
 

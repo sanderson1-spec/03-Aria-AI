@@ -1,163 +1,98 @@
-#!/usr/bin/env node
-
 /**
  * Unit Tests for ConfigurationRepository
  * 
  * CLEAN ARCHITECTURE TESTING:
- * - Test repository creation and inheritance
- * - Test all CRUD operations with proper validation
- * - Test multi-user support and data isolation
+ * - Test configuration data management
+ * - Test basic repository operations
+ * - Test database access patterns
  * - Mock database dependencies for isolated testing
- * - Verify proper error handling
  */
 
-const ConfigurationRepository = require('../../backend/dal/repositories/CORE_ConfigurationRepository.js');
-const { ArchitectureAssertions } = require('../test-framework');
+const ConfigurationRepository = require('../../backend/dal/repositories/CORE_ConfigurationRepository');
 
-class SimpleTest {
-    constructor(name) {
-        this.name = name;
-        this.tests = [];
-        this.passed = 0;
-        this.failed = 0;
-    }
-
-    test(description, testFunction) {
-        this.tests.push({ description, testFunction });
-    }
-
-    async run() {
-        console.log(`\n🧪 ${this.name}`);
-        console.log('='.repeat(this.name.length + 4));
-        
-        for (const { description, testFunction } of this.tests) {
-            try {
-                await testFunction();
-                console.log(`  ✅ ${description}`);
-                this.passed++;
-            } catch (error) {
-                console.log(`  ❌ ${description}`);
-                console.log(`     Error: ${error.message}`);
-                this.failed++;
-            }
-        }
-        
-        const total = this.passed + this.failed;
-        console.log(`\n📊 Results: ${this.passed}/${total} passed`);
-        
-        return this.failed === 0;
-    }
-}
-
-// Helper functions
-function createMockDependencies() {
-    return {
-        logger: {
-            info: () => {},
-            debug: () => {},
-            warn: () => {},
-            error: () => {}
-        },
-        errorHandling: {
-            wrapRepositoryError: (error, message, context) => {
-                const wrappedError = new Error(`${message}: ${error.message}`);
-                wrappedError.context = context;
-                return wrappedError;
-            }
-        },
-        dbAccess: {
-            queryOne: () => Promise.resolve(null),
-            queryAll: () => Promise.resolve([]),
-            run: () => Promise.resolve({ changes: 1 })
-        }
-    };
-}
-
-async function runConfigurationRepositoryTests() {
-    const suite = new SimpleTest('ConfigurationRepository Unit Tests');
-    let repository;
+describe('ConfigurationRepository', () => {
+    let configRepo;
     let mockDeps;
 
-    // Setup before each test
-    function setup() {
+    beforeEach(() => {
         mockDeps = createMockDependencies();
-        repository = new ConfigurationRepository('configuration', mockDeps);
-    }
-
-    // CLEAN ARCHITECTURE: Test repository creation and inheritance
-    suite.test('should extend BaseRepository', () => {
-        setup();
-        ArchitectureAssertions.assertExtendsBaseRepository(repository);
+        configRepo = new ConfigurationRepository('configuration', mockDeps);
     });
 
-    suite.test('should have correct table name', () => {
-        setup();
-        if (repository.tableName !== 'configuration') {
-            throw new Error(`Expected table name 'configuration', got '${repository.tableName}'`);
-        }
-    });
-
-    suite.test('should implement required repository interface', () => {
-        setup();
-        ArchitectureAssertions.assertRepositoryInterface(repository);
-    });
-
-    // CLEAN ARCHITECTURE: Test basic CRUD operations
-    suite.test('should support count operations', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.resolve({ count: 5 });
-        
-        const count = await repository.count();
-        
-        if (count !== 5) {
-            throw new Error('count() should return correct count');
-        }
-    });
-
-    suite.test('should support findById operations', async () => {
-        setup();
-        const mockRecord = { id: 'test-id', name: 'test' };
-        mockDeps.dbAccess.queryOne = () => Promise.resolve(mockRecord);
-        
-        const result = await repository.findById('test-id');
-        
-        if (!result || result.id !== 'test-id') {
-            throw new Error('findById should return correct record');
-        }
-    });
-
-    // CLEAN ARCHITECTURE: Test error handling
-    suite.test('should handle database errors gracefully', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.reject(new Error('Database connection failed'));
-        
-        try {
-            await repository.findById('test-id');
-            throw new Error('Should have thrown an error');
-        } catch (error) {
-            if (!error.message.includes('Failed to find')) {
-                throw new Error('Should wrap database errors with context');
-            }
-        }
-    });
-
-    // TODO: Add specific tests for ConfigurationRepository domain methods
-    // TODO: Add multi-user support tests if applicable
-    // TODO: Add business logic validation tests
-
-    return await suite.run();
-}
-
-// Run tests if called directly
-if (require.main === module) {
-    runConfigurationRepositoryTests()
-        .then(success => {
-            process.exit(success ? 0 : 1);
-        })
-        .catch(error => {
-            console.error('❌ Test execution failed:', error.message);
-            process.exit(1);
+    describe('Architecture Compliance', () => {
+        test('should extend BaseRepository', () => {
+            expect(configRepo.constructor.name).toBe('ConfigurationRepository');
+            expect(configRepo.tableName).toBe('configuration');
+            expect(configRepo.dal).toBeDefined();
+            expect(configRepo.logger).toBeDefined();
+            expect(configRepo.errorHandler).toBeDefined();
         });
-}
 
-module.exports = { runConfigurationRepositoryTests };
+        test('should implement required repository interface', () => {
+            const requiredMethods = ['count', 'findById', 'create', 'update', 'delete'];
+            requiredMethods.forEach(method => {
+                expect(typeof configRepo[method]).toBe('function');
+            });
+        });
+
+        test('should have getConfigValue method', () => {
+            expect(typeof configRepo.getConfigValue).toBe('function');
+        });
+    });
+
+    describe('Configuration Operations', () => {
+        test('should get configuration value by key', async () => {
+            const mockValue = 'Aria AI';
+            mockDeps.dal.queryOne.mockResolvedValue({ key: 'app_name', value: mockValue });
+
+            const result = await configRepo.getConfigValue('app_name');
+
+            expect(result).toBe(mockValue);
+            expect(mockDeps.dal.queryOne).toHaveBeenCalledWith(
+                expect.stringContaining('key = ?'),
+                ['app_name']
+            );
+        });
+
+        test('should set configuration value', async () => {
+            mockDeps.dal.execute.mockResolvedValue({ changes: 1 });
+
+            await configRepo.setConfigValue('theme', 'dark', 'string');
+
+            expect(mockDeps.dal.execute).toHaveBeenCalledWith(
+                expect.stringContaining('INSERT OR REPLACE'),
+                expect.arrayContaining(['theme', 'dark', 'string'])
+            );
+        });
+    });
+
+    describe('Basic Repository Operations', () => {
+        test('should create configuration record', async () => {
+            const mockConfig = { key: 'new_setting', value: 'test_value', type: 'string' };
+            mockDeps.dal.create.mockResolvedValue(mockConfig);
+
+            const result = await configRepo.create(mockConfig);
+
+            expect(result).toEqual(mockConfig);
+            expect(mockDeps.dal.create).toHaveBeenCalledWith('configuration', mockConfig);
+        });
+
+        test('should count configurations', async () => {
+            mockDeps.dal.count.mockResolvedValue(10);
+
+            const result = await configRepo.count();
+
+            expect(result).toBe(10);
+            expect(mockDeps.dal.count).toHaveBeenCalledWith('configuration', {});
+        });
+    });
+
+    describe('Error Handling', () => {
+        test('should handle database errors gracefully', async () => {
+            const dbError = new Error('Database connection failed');
+            mockDeps.dal.queryOne.mockRejectedValue(dbError);
+
+            await expect(configRepo.getConfigValue('test_key')).rejects.toThrow();
+        });
+    });
+});

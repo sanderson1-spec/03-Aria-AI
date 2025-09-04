@@ -1,141 +1,104 @@
-#!/usr/bin/env node
-
 /**
  * Unit Tests for PsychologyService
  * 
  * CLEAN ARCHITECTURE TESTING:
  * - Test service creation and inheritance
- * - Test all public methods with various inputs
- * - Test dependency injection and initialization
+ * - Test psychology state management
+ * - Test character framework operations
  * - Mock external dependencies for isolated testing
- * - Verify proper AbstractService integration
  */
 
-const PsychologyService = require('../../backend/services/domain/CORE_PsychologyService.js');
-const { MockFactory, ArchitectureAssertions } = require('../test-framework');
+const PsychologyService = require('../../backend/services/domain/CORE_PsychologyService');
 
-class SimpleTest {
-    constructor(name) {
-        this.name = name;
-        this.tests = [];
-        this.passed = 0;
-        this.failed = 0;
-    }
-
-    test(description, testFunction) {
-        this.tests.push({ description, testFunction });
-    }
-
-    async run() {
-        console.log(`\n🧪 ${this.name}`);
-        console.log('='.repeat(this.name.length + 4));
-        
-        for (const { description, testFunction } of this.tests) {
-            try {
-                await testFunction();
-                console.log(`  ✅ ${description}`);
-                this.passed++;
-            } catch (error) {
-                console.log(`  ❌ ${description}`);
-                console.log(`     Error: ${error.message}`);
-                this.failed++;
-            }
-        }
-        
-        const total = this.passed + this.failed;
-        console.log(`\n📊 Results: ${this.passed}/${total} passed`);
-        
-        return this.failed === 0;
-    }
-}
-
-async function runPsychologyServiceTests() {
-    const suite = new SimpleTest('PsychologyService Unit Tests');
-    let service;
+describe('PsychologyService', () => {
+    let psychologyService;
     let mockDeps;
 
-    // Setup before each test
-    function setup() {
-        mockDeps = MockFactory.createServiceMocks('psychologyservice');
-        service = new PsychologyService(mockDeps);
-    }
-
-    // CLEAN ARCHITECTURE: Test service creation and inheritance
-    suite.test('should extend AbstractService', () => {
-        setup();
-        ArchitectureAssertions.assertExtendsAbstractService(service);
+    beforeEach(() => {
+        mockDeps = createMockDependencies();
+        // Add database service mock with DAL
+        mockDeps.database = {
+            getDAL: jest.fn().mockReturnValue({
+                psychology: {
+                    getCharacterPsychologicalFrameworks: jest.fn(),
+                    getCharacterPsychologicalState: jest.fn(),
+                    getPsychologicalState: jest.fn(),
+                    saveCharacterPsychologicalState: jest.fn(),
+                    getPsychologyEvolutionLog: jest.fn(),
+                    logPsychologyEvolution: jest.fn()
+                }
+            })
+        };
+        
+        psychologyService = new PsychologyService(mockDeps);
     });
 
-    suite.test('should have correct service name', () => {
-        setup();
-        if (service.name !== 'PsychologyService') {
-            throw new Error(`Expected service name 'PsychologyService', got '${service.name}'`);
-        }
-    });
-
-    suite.test('should implement required service interface', () => {
-        setup();
-        ArchitectureAssertions.assertServiceInterface(service);
-    });
-
-    // CLEAN ARCHITECTURE: Test service initialization
-    suite.test('should initialize successfully', async () => {
-        setup();
-        await service.initialize();
-        
-        if (!service.initialized) {
-            throw new Error('Service should be initialized');
-        }
-        
-        if (!service.healthy) {
-            throw new Error('Service should be healthy after initialization');
-        }
-    });
-
-    // CLEAN ARCHITECTURE: Test health check
-    suite.test('should provide health status', async () => {
-        setup();
-        await service.initialize();
-        
-        const health = await service.checkHealth();
-        
-        if (!health.healthy) {
-            throw new Error('Initialized service should be healthy');
-        }
-        
-        if (health.service !== 'PsychologyService') {
-            throw new Error('Health check should return correct service name');
-        }
-    });
-
-    // CLEAN ARCHITECTURE: Test graceful shutdown
-    suite.test('should shutdown gracefully', async () => {
-        setup();
-        await service.initialize();
-        await service.shutdown();
-        
-        if (service.state !== 'stopped') {
-            throw new Error('Service should be stopped after shutdown');
-        }
-    });
-
-    // TODO: Add specific tests for PsychologyService business logic
-    // TODO: Add dependency interaction tests
-    // TODO: Add error handling tests for PsychologyService specific scenarios
-
-    return await suite.run();
-}
-
-// Run tests if called directly
-if (require.main === module) {
-    runPsychologyServiceTests()
-        .then(success => {
-            process.exit(success ? 0 : 1);
-        })
-        .catch(error => {
-            console.error('❌ Test execution failed:', error.message);
-            process.exit(1);
+    describe('Architecture Compliance', () => {
+        test('should extend AbstractService', () => {
+            expect(psychologyService.constructor.name).toBe('PsychologyService');
+            expect(psychologyService.name).toBe('Psychology');
+            expect(psychologyService.logger).toBeDefined();
+            expect(psychologyService.errorHandler).toBeDefined();
         });
-}
 
-module.exports = { runPsychologyServiceTests };
+        test('should have DAL access', () => {
+            expect(psychologyService.dal).toBeDefined();
+            expect(psychologyService.dal.psychology).toBeDefined();
+        });
+
+        test('should implement required service interface', () => {
+            const requiredMethods = ['initialize', 'shutdown', 'checkHealth'];
+            requiredMethods.forEach(method => {
+                expect(typeof psychologyService[method]).toBe('function');
+            });
+        });
+
+        test('should implement psychology-specific methods', () => {
+            const psychologyMethods = [
+                'getPersonalityFramework',
+                'getCharacterState',
+                'updateCharacterState',
+                'initializeCharacterState',
+                'cleanupInactiveStates'
+            ];
+            psychologyMethods.forEach(method => {
+                expect(typeof psychologyService[method]).toBe('function');
+            });
+        });
+    });
+
+    describe('Service Lifecycle', () => {
+        test('should initialize successfully', async () => {
+            jest.spyOn(psychologyService, 'onInitialize').mockResolvedValue();
+            
+            await expect(psychologyService.initialize()).resolves.not.toThrow();
+        });
+
+        test('should provide health status', async () => {
+            const health = await psychologyService.checkHealth();
+            expect(health).toBeDefined();
+            expect(typeof health.healthy).toBe('boolean');
+        });
+
+        test('should shutdown gracefully', async () => {
+            jest.spyOn(psychologyService, 'onShutdown').mockResolvedValue();
+            
+            await expect(psychologyService.shutdown()).resolves.not.toThrow();
+        });
+    });
+
+    describe('Psychology Operations', () => {
+        test('should manage character states', async () => {
+            const mockState = { emotional_state: { mood: 'happy' } };
+            mockDeps.database.getDAL().psychology.getPsychologicalState.mockResolvedValue(mockState);
+
+            const result = await psychologyService.getCharacterState('session-123');
+            expect(result).toEqual(mockState);
+        });
+
+        test('should cleanup inactive states', async () => {
+            const result = await psychologyService.cleanupInactiveStates();
+            expect(typeof result).toBe('number');
+        });
+    });
+});

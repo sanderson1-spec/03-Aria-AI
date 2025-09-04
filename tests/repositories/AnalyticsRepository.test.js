@@ -1,163 +1,111 @@
-#!/usr/bin/env node
-
 /**
  * Unit Tests for AnalyticsRepository
  * 
  * CLEAN ARCHITECTURE TESTING:
- * - Test repository creation and inheritance
- * - Test all CRUD operations with proper validation
- * - Test multi-user support and data isolation
+ * - Test analytics data management
+ * - Test data aggregation operations
+ * - Test multi-user analytics isolation
  * - Mock database dependencies for isolated testing
- * - Verify proper error handling
  */
 
-const AnalyticsRepository = require('../../backend/dal/repositories/CORE_AnalyticsRepository.js');
-const { ArchitectureAssertions } = require('../test-framework');
+const AnalyticsRepository = require('../../backend/dal/repositories/CORE_AnalyticsRepository');
 
-class SimpleTest {
-    constructor(name) {
-        this.name = name;
-        this.tests = [];
-        this.passed = 0;
-        this.failed = 0;
-    }
-
-    test(description, testFunction) {
-        this.tests.push({ description, testFunction });
-    }
-
-    async run() {
-        console.log(`\n🧪 ${this.name}`);
-        console.log('='.repeat(this.name.length + 4));
-        
-        for (const { description, testFunction } of this.tests) {
-            try {
-                await testFunction();
-                console.log(`  ✅ ${description}`);
-                this.passed++;
-            } catch (error) {
-                console.log(`  ❌ ${description}`);
-                console.log(`     Error: ${error.message}`);
-                this.failed++;
-            }
-        }
-        
-        const total = this.passed + this.failed;
-        console.log(`\n📊 Results: ${this.passed}/${total} passed`);
-        
-        return this.failed === 0;
-    }
-}
-
-// Helper functions
-function createMockDependencies() {
-    return {
-        logger: {
-            info: () => {},
-            debug: () => {},
-            warn: () => {},
-            error: () => {}
-        },
-        errorHandling: {
-            wrapRepositoryError: (error, message, context) => {
-                const wrappedError = new Error(`${message}: ${error.message}`);
-                wrappedError.context = context;
-                return wrappedError;
-            }
-        },
-        dbAccess: {
-            queryOne: () => Promise.resolve(null),
-            queryAll: () => Promise.resolve([]),
-            run: () => Promise.resolve({ changes: 1 })
-        }
-    };
-}
-
-async function runAnalyticsRepositoryTests() {
-    const suite = new SimpleTest('AnalyticsRepository Unit Tests');
-    let repository;
+describe('AnalyticsRepository', () => {
+    let analyticsRepo;
     let mockDeps;
 
-    // Setup before each test
-    function setup() {
+    beforeEach(() => {
         mockDeps = createMockDependencies();
-        repository = new AnalyticsRepository('analytics_data', mockDeps);
-    }
-
-    // CLEAN ARCHITECTURE: Test repository creation and inheritance
-    suite.test('should extend BaseRepository', () => {
-        setup();
-        ArchitectureAssertions.assertExtendsBaseRepository(repository);
+        analyticsRepo = new AnalyticsRepository('analytics_data', mockDeps);
     });
 
-    suite.test('should have correct table name', () => {
-        setup();
-        if (repository.tableName !== 'analytics_data') {
-            throw new Error(`Expected table name 'analytics_data', got '${repository.tableName}'`);
-        }
-    });
-
-    suite.test('should implement required repository interface', () => {
-        setup();
-        ArchitectureAssertions.assertRepositoryInterface(repository);
-    });
-
-    // CLEAN ARCHITECTURE: Test basic CRUD operations
-    suite.test('should support count operations', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.resolve({ count: 5 });
-        
-        const count = await repository.count();
-        
-        if (count !== 5) {
-            throw new Error('count() should return correct count');
-        }
-    });
-
-    suite.test('should support findById operations', async () => {
-        setup();
-        const mockRecord = { id: 'test-id', name: 'test' };
-        mockDeps.dbAccess.queryOne = () => Promise.resolve(mockRecord);
-        
-        const result = await repository.findById('test-id');
-        
-        if (!result || result.id !== 'test-id') {
-            throw new Error('findById should return correct record');
-        }
-    });
-
-    // CLEAN ARCHITECTURE: Test error handling
-    suite.test('should handle database errors gracefully', async () => {
-        setup();
-        mockDeps.dbAccess.queryOne = () => Promise.reject(new Error('Database connection failed'));
-        
-        try {
-            await repository.findById('test-id');
-            throw new Error('Should have thrown an error');
-        } catch (error) {
-            if (!error.message.includes('Failed to find')) {
-                throw new Error('Should wrap database errors with context');
-            }
-        }
-    });
-
-    // TODO: Add specific tests for AnalyticsRepository domain methods
-    // TODO: Add multi-user support tests if applicable
-    // TODO: Add business logic validation tests
-
-    return await suite.run();
-}
-
-// Run tests if called directly
-if (require.main === module) {
-    runAnalyticsRepositoryTests()
-        .then(success => {
-            process.exit(success ? 0 : 1);
-        })
-        .catch(error => {
-            console.error('❌ Test execution failed:', error.message);
-            process.exit(1);
+    describe('Architecture Compliance', () => {
+        test('should extend BaseRepository', () => {
+            expect(analyticsRepo.constructor.name).toBe('AnalyticsRepository');
+            expect(analyticsRepo.tableName).toBe('analytics_data');
+            expect(analyticsRepo.dal).toBeDefined();
+            expect(analyticsRepo.logger).toBeDefined();
+            expect(analyticsRepo.errorHandler).toBeDefined();
         });
-}
 
-module.exports = { runAnalyticsRepositoryTests };
+        test('should implement required repository interface', () => {
+            const requiredMethods = ['count', 'findById', 'create', 'update', 'delete'];
+            requiredMethods.forEach(method => {
+                expect(typeof analyticsRepo[method]).toBe('function');
+            });
+        });
+
+        test('should implement analytics-specific methods', () => {
+            const analyticsMethods = [
+                'recordEvent',
+                'getEventsByType',
+                'getUserAnalyticsSummary'
+            ];
+            analyticsMethods.forEach(method => {
+                expect(typeof analyticsRepo[method]).toBe('function');
+            });
+        });
+    });
+
+    describe('Multi-User Analytics Operations', () => {
+        test('should record event with proper data structure', async () => {
+            const mockEvent = {
+                user_id: 'user-123',
+                event_type: 'chat_message',
+                event_data: '{"message_length": 50}'
+            };
+            mockDeps.dal.create.mockResolvedValue({ id: 'event-1', ...mockEvent });
+
+            const result = await analyticsRepo.recordEvent(mockEvent);
+
+            expect(result).toBeDefined();
+            expect(mockDeps.dal.create).toHaveBeenCalledWith('analytics_data', expect.objectContaining({
+                user_id: 'user-123',
+                event_type: 'chat_message'
+            }));
+        });
+
+        test('should get events by type with user filtering', async () => {
+            const mockData = [
+                { id: 1, user_id: 'user-123', event_type: 'chat_message', timestamp: '2024-01-01' }
+            ];
+            mockDeps.dal.query.mockResolvedValue(mockData);
+
+            const result = await analyticsRepo.getEventsByType('chat_message', 'user-123', 30);
+
+            expect(result).toEqual(mockData);
+            expect(mockDeps.dal.query).toHaveBeenCalledWith(
+                expect.stringContaining('event_type = ?'),
+                expect.arrayContaining(['chat_message', 'user-123', 30])
+            );
+        });
+
+        test('should get user analytics summary', async () => {
+            const mockSummary = {
+                total_events: 100,
+                event_types: { chat_message: 50, user_action: 30 }
+            };
+            mockDeps.dal.query.mockResolvedValue([mockSummary]);
+
+            const result = await analyticsRepo.getUserAnalyticsSummary('user-123');
+
+            expect(result).toEqual([mockSummary]);
+            expect(mockDeps.dal.query).toHaveBeenCalledWith(
+                expect.stringContaining('user_id = ?'),
+                expect.arrayContaining(['user-123'])
+            );
+        });
+    });
+
+    describe('Error Handling', () => {
+        test('should handle database errors gracefully', async () => {
+            const dbError = new Error('Database connection failed');
+            mockDeps.dal.create.mockRejectedValue(dbError);
+
+            const mockEvent = { user_id: 'user-123', event_type: 'test' };
+            await expect(
+                analyticsRepo.recordEvent(mockEvent)
+            ).rejects.toThrow();
+        });
+    });
+});

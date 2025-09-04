@@ -21,7 +21,7 @@ class ProactiveRepository extends BaseRepository {
             const sql = `
                 SELECT * FROM proactive_engagement_history 
                 WHERE user_id = ?
-                ORDER BY created_at DESC
+                ORDER BY timestamp DESC
                 LIMIT ?
             `;
             return await this.dal.query(sql, [userId, limit]);

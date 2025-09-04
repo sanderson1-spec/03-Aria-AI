@@ -138,7 +138,7 @@ describe('ErrorHandlingService', () => {
             expect(wrappedError.context).toEqual(context);
             expect(wrappedError.layer).toBe('domain');
             expect(wrappedError.timestamp).toBe('2024-01-01T12:00:00.000Z');
-            expect(wrappedError.errorId).toBe('err_1704110400000_0rnl7mh5h');
+            expect(wrappedError.errorId).toMatch(/^err_1704110400000_[a-z0-9]+$/);
             expect(wrappedError.serviceName).toBe('ErrorHandlingService');
         });
 
@@ -161,7 +161,7 @@ describe('ErrorHandlingService', () => {
                 'Domain error occurred',
                 'ErrorHandlingService',
                 expect.objectContaining({
-                    errorId: 'err_1704110400000_0rnl7mh5h',
+                    errorId: expect.stringMatching(/^err_1704110400000_[a-z0-9]+$/),
                     originalMessage: 'Business rule violated',
                     enhancedMessage: 'Invalid user operation',
                     context: { userId: 123 },

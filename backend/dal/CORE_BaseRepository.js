@@ -205,6 +205,62 @@ class BaseRepository {
             return false;
         }
     }
+
+    /**
+     * Validate required fields are present and not empty
+     * CLEAN ARCHITECTURE: Domain layer validation helper
+     */
+    validateRequiredFields(data, requiredFields, operation = 'operation') {
+        if (!data || typeof data !== 'object') {
+            throw new Error(`Invalid data provided for ${operation}: data must be an object`);
+        }
+
+        const missingFields = [];
+        const emptyFields = [];
+
+        for (const field of requiredFields) {
+            if (!(field in data)) {
+                missingFields.push(field);
+            } else if (data[field] === null || data[field] === undefined || data[field] === '') {
+                emptyFields.push(field);
+            }
+        }
+
+        if (missingFields.length > 0 || emptyFields.length > 0) {
+            const errors = [];
+            if (missingFields.length > 0) {
+                errors.push(`Missing required fields: ${missingFields.join(', ')}`);
+            }
+            if (emptyFields.length > 0) {
+                errors.push(`Empty required fields: ${emptyFields.join(', ')}`);
+            }
+            
+            throw new Error(`Validation failed for ${operation}: ${errors.join('; ')}`);
+        }
+
+        return true;
+    }
+
+    /**
+     * Sanitize data by removing undefined/null values and ensuring proper types
+     * CLEAN ARCHITECTURE: Data validation helper
+     */
+    sanitizeData(data) {
+        if (!data || typeof data !== 'object') {
+            return data;
+        }
+
+        const sanitized = {};
+        for (const [key, value] of Object.entries(data)) {
+            // Skip undefined values
+            if (value !== undefined) {
+                // Convert null to explicit null (for database)
+                sanitized[key] = value;
+            }
+        }
+
+        return sanitized;
+    }
 }
 
 module.exports = BaseRepository; 
