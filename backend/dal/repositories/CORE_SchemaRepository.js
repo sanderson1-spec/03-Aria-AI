@@ -20,7 +20,7 @@ class SchemaRepository extends BaseRepository {
                 ORDER BY version DESC 
                 LIMIT 1
             `;
-            return await this.dbAccess.queryOne(sql, []);
+            return await this.dal.queryOne(sql, []);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get current schema version');
         }
@@ -46,7 +46,7 @@ class SchemaRepository extends BaseRepository {
                 VALUES (?, ?, ?, ?)
             `;
             
-            await this.dbAccess.run(sql, [record.id, record.version, record.description, record.applied_at]);
+            await this.dal.execute(sql, [record.id, record.version, record.description, record.applied_at]);
             return versionId;
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to record schema version', { version, description });
@@ -62,7 +62,7 @@ class SchemaRepository extends BaseRepository {
                 SELECT * FROM ${this.tableName} 
                 ORDER BY version DESC
             `;
-            return await this.dbAccess.queryAll(sql, []);
+            return await this.dal.query(sql, []);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get schema history');
         }

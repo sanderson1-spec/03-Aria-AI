@@ -24,7 +24,7 @@ class ProactiveRepository extends BaseRepository {
                 ORDER BY created_at DESC
                 LIMIT ?
             `;
-            return await this.dbAccess.query(sql, [userId, limit]);
+            return await this.dal.query(sql, [userId, limit]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get engagement history', { userId, limit });
         }
@@ -49,7 +49,7 @@ class ProactiveRepository extends BaseRepository {
             sql += ` ORDER BY updated_at DESC LIMIT ?`;
             params.push(limit);
             
-            return await this.dbAccess.query(sql, params);
+            return await this.dal.query(sql, params);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get learning patterns', { userId, patternType, limit });
         }
@@ -73,7 +73,7 @@ class ProactiveRepository extends BaseRepository {
             
             sql += ` ORDER BY updated_at DESC`;
             
-            return await this.dbAccess.query(sql, params);
+            return await this.dal.query(sql, params);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get timing optimizations', { userId, optimizationType });
         }
@@ -102,7 +102,7 @@ class ProactiveRepository extends BaseRepository {
                 CREATE INDEX IF NOT EXISTS idx_proactive_trigger ON proactive_engagement_history(trigger_type);
             `;
             
-            await this.dbAccess.execute(schema);
+            await this.dal.execute(schema);
             return { success: true };
         } catch (error) {
             throw this.errorHandler.wrapInfrastructureError(error, 'Failed to ensure proactive schema');

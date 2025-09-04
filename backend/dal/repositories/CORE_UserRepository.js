@@ -15,7 +15,7 @@ class UserRepository extends BaseRepository {
     async findByUsername(username) {
         try {
             const sql = `SELECT * FROM ${this.tableName} WHERE username = ? AND is_active = 1`;
-            return await this.dbAccess.queryOne(sql, [username]);
+            return await this.dal.queryOne(sql, [username]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to find user by username', { username });
         }
@@ -27,7 +27,7 @@ class UserRepository extends BaseRepository {
     async findByEmail(email) {
         try {
             const sql = `SELECT * FROM ${this.tableName} WHERE email = ? AND is_active = 1`;
-            return await this.dbAccess.queryOne(sql, [email]);
+            return await this.dal.queryOne(sql, [email]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to find user by email', { email });
         }
@@ -111,7 +111,7 @@ class UserRepository extends BaseRepository {
                 GROUP BY u.id
             `;
             
-            return await this.dbAccess.queryOne(sql, [userId]);
+            return await this.dal.queryOne(sql, [userId]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get user stats', { userId });
         }
@@ -130,7 +130,7 @@ class UserRepository extends BaseRepository {
                 LIMIT ?
             `;
             
-            return await this.dbAccess.queryAll(sql, [limit]);
+            return await this.dal.query(sql, [limit]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get active users', { limit });
         }

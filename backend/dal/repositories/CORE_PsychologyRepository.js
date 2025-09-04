@@ -29,7 +29,7 @@ class PsychologyRepository extends BaseRepository {
                 WHERE personality_id = ?
                 ORDER BY created_at DESC
             `;
-            return await this.dbAccess.query(sql, [characterId]);
+            return await this.dal.query(sql, [characterId]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get character frameworks', { userId, characterId });
         }
@@ -46,7 +46,7 @@ class PsychologyRepository extends BaseRepository {
                 ORDER BY last_updated DESC
                 LIMIT 1
             `;
-            return await this.dbAccess.queryOne(sql, [userId, characterId]);
+            return await this.dal.queryOne(sql, [userId, characterId]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get character state', { userId, characterId });
         }
@@ -76,7 +76,7 @@ class PsychologyRepository extends BaseRepository {
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             `;
             
-            await this.dbAccess.run(sql, [
+            await this.dal.execute(sql, [
                 state.id, state.user_id, state.character_id, state.framework_id,
                 state.state_data, state.created_at, state.updated_at
             ]);
@@ -98,7 +98,7 @@ class PsychologyRepository extends BaseRepository {
                 ORDER BY timestamp DESC
                 LIMIT ?
             `;
-            return await this.dbAccess.query(sql, [userId, characterId, limit]);
+            return await this.dal.query(sql, [userId, characterId, limit]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get psychology evolution log', { userId, characterId, limit });
         }
@@ -130,7 +130,7 @@ class PsychologyRepository extends BaseRepository {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
             
-            await this.dbAccess.run(sql, [
+            await this.dal.execute(sql, [
                 evolution.id, evolution.user_id, evolution.character_id, evolution.change_type,
                 evolution.before_state, evolution.after_state, evolution.trigger_event,
                 evolution.significance_score, evolution.timestamp

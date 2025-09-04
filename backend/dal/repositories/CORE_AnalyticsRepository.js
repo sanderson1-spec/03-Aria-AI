@@ -51,7 +51,7 @@ class AnalyticsRepository extends BaseRepository {
             sql += ` ORDER BY timestamp DESC LIMIT ?`;
             params.push(limit);
             
-            return await this.dbAccess.queryAll(sql, params);
+            return await this.dal.query(sql, params);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get events by type', { eventType, userId, limit });
         }
@@ -85,7 +85,7 @@ class AnalyticsRepository extends BaseRepository {
             
             sql += ` GROUP BY event_type ORDER BY event_count DESC`;
             
-            return await this.dbAccess.queryAll(sql, params);
+            return await this.dal.query(sql, params);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get user analytics summary', { userId, startDate, endDate });
         }
@@ -120,7 +120,7 @@ class AnalyticsRepository extends BaseRepository {
             
             sql += ` GROUP BY event_type ORDER BY total_events DESC`;
             
-            return await this.dbAccess.queryAll(sql, params);
+            return await this.dal.query(sql, params);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get system analytics summary', { startDate, endDate });
         }
@@ -134,7 +134,7 @@ class AnalyticsRepository extends BaseRepository {
             const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
             
             const sql = `DELETE FROM ${this.tableName} WHERE timestamp < ?`;
-            const result = await this.dbAccess.run(sql, [cutoffDate]);
+            const result = await this.dal.execute(sql, [cutoffDate]);
             
             if (this.logger) {
                 this.logger.info(`Cleaned up old analytics data`, 'AnalyticsRepository', {
@@ -164,7 +164,7 @@ class AnalyticsRepository extends BaseRepository {
                 LIMIT ?
             `;
             
-            return await this.dbAccess.queryAll(sql, [userId, startTime, limit]);
+            return await this.dal.query(sql, [userId, startTime, limit]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get recent user activity', { userId, hours, limit });
         }

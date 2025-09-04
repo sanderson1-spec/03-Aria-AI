@@ -26,7 +26,7 @@ class ChatRepository extends BaseRepository {
                 LIMIT ? OFFSET ?
             `;
             
-            const chats = await this.dbAccess.query(sql, [userId, pageSize, offset]);
+            const chats = await this.dal.query(sql, [userId, pageSize, offset]);
             const totalCount = await this.count({ user_id: userId, is_active: 1 });
 
             return {
@@ -83,12 +83,12 @@ class ChatRepository extends BaseRepository {
                 WHERE c.id = ? AND c.user_id = ? AND c.is_active = 1
             `;
             
-            const chat = await this.dbAccess.queryOne(sql, [chatId, userId]);
+            const chat = await this.dal.queryOne(sql, [chatId, userId]);
             
             if (chat) {
                 // Get message count
                 const messageCountSql = `SELECT COUNT(*) as count FROM conversation_logs WHERE chat_id = ? AND user_id = ?`;
-                const countResult = await this.dbAccess.queryOne(messageCountSql, [chatId, userId]);
+                const countResult = await this.dal.queryOne(messageCountSql, [chatId, userId]);
                 chat.message_count = countResult ? countResult.count : 0;
             }
             
@@ -116,7 +116,7 @@ class ChatRepository extends BaseRepository {
                 LIMIT ?
             `;
             
-            return await this.dbAccess.query(sql, [userId, limit]);
+            return await this.dal.query(sql, [userId, limit]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get recent user chats', { userId, limit });
         }
@@ -134,7 +134,7 @@ class ChatRepository extends BaseRepository {
                 WHERE id = ? AND user_id = ? AND is_active = 1
             `;
             
-            const result = await this.dbAccess.run(sql, [newTitle, new Date().toISOString(), chatId, userId]);
+            const result = await this.dal.execute(sql, [newTitle, new Date().toISOString(), chatId, userId]);
             return { updated: result.changes > 0 };
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to update chat title', { userId, chatId, newTitle });
@@ -153,7 +153,7 @@ class ChatRepository extends BaseRepository {
                 WHERE id = ? AND user_id = ? AND is_active = 1
             `;
             
-            const result = await this.dbAccess.run(sql, [
+            const result = await this.dal.execute(sql, [
                 JSON.stringify(metadata), 
                 new Date().toISOString(), 
                 chatId, 
@@ -178,7 +178,7 @@ class ChatRepository extends BaseRepository {
                 WHERE id = ? AND user_id = ? AND is_active = 1
             `;
             
-            const result = await this.dbAccess.run(sql, [new Date().toISOString(), chatId, userId]);
+            const result = await this.dal.execute(sql, [new Date().toISOString(), chatId, userId]);
             return { deactivated: result.changes > 0 };
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to deactivate chat', { userId, chatId });
@@ -202,7 +202,7 @@ class ChatRepository extends BaseRepository {
                 WHERE c.user_id = ? AND c.is_active = 1
             `;
             
-            const stats = await this.dbAccess.queryOne(sql, [userId]);
+            const stats = await this.dal.queryOne(sql, [userId]);
             
             return {
                 totalChats: stats.total_chats || 0,
@@ -232,7 +232,7 @@ class ChatRepository extends BaseRepository {
             `;
             
             const searchPattern = `%${searchTerm}%`;
-            return await this.dbAccess.query(sql, [userId, searchPattern, searchPattern, limit]);
+            return await this.dal.query(sql, [userId, searchPattern, searchPattern, limit]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to search user chats', { userId, searchTerm, limit });
         }
@@ -253,7 +253,7 @@ class ChatRepository extends BaseRepository {
                 LIMIT ?
             `;
             
-            return await this.dbAccess.query(sql, [userId, personalityId, limit]);
+            return await this.dal.query(sql, [userId, personalityId, limit]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get user chats by personality', { userId, personalityId, limit });
         }

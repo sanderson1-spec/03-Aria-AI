@@ -903,7 +903,7 @@ class ConversationRepository extends BaseRepository {
                 ORDER BY updated_at DESC
                 LIMIT ?
             `;
-            return await this.dbAccess.query(sql, [userId, characterId, limit]);
+            return await this.dal.query(sql, [userId, characterId, limit]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get character memory weights', { userId, characterId, limit });
         }
@@ -935,7 +935,7 @@ class ConversationRepository extends BaseRepository {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
             
-            await this.dbAccess.run(sql, [
+            await this.dal.execute(sql, [
                 weight.id, weight.user_id, weight.character_id, weight.message_id,
                 weight.weight_value, weight.memory_type, weight.context_data,
                 weight.created_at, weight.updated_at

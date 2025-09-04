@@ -15,7 +15,7 @@ class ConfigurationRepository extends BaseRepository {
     async getConfigValue(key) {
         try {
             const sql = `SELECT * FROM ${this.tableName} WHERE key = ?`;
-            const config = await this.dbAccess.queryOne(sql, [key]);
+            const config = await this.dal.queryOne(sql, [key]);
             
             if (!config) {
                 return null;
@@ -72,7 +72,7 @@ class ConfigurationRepository extends BaseRepository {
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             `;
             
-            await this.dbAccess.run(sql, [
+            await this.dal.execute(sql, [
                 config.key, config.value, config.type, config.description, 
                 config.category, config.is_user_configurable, config.updated_at
             ]);
@@ -89,7 +89,7 @@ class ConfigurationRepository extends BaseRepository {
     async getConfigByCategory(category) {
         try {
             const sql = `SELECT * FROM ${this.tableName} WHERE category = ? ORDER BY key`;
-            const configs = await this.dbAccess.queryAll(sql, [category]);
+            const configs = await this.dal.query(sql, [category]);
             
             // Convert to key-value object with parsed values
             const result = {};
@@ -127,7 +127,7 @@ class ConfigurationRepository extends BaseRepository {
                 ORDER BY category, key
             `;
             
-            return await this.dbAccess.queryAll(sql, []);
+            return await this.dal.query(sql, []);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get user configurable settings');
         }
@@ -139,7 +139,7 @@ class ConfigurationRepository extends BaseRepository {
     async getAllConfig() {
         try {
             const sql = `SELECT * FROM ${this.tableName} ORDER BY category, key`;
-            const configs = await this.dbAccess.queryAll(sql, []);
+            const configs = await this.dal.query(sql, []);
             
             const result = {};
             for (const config of configs) {
@@ -170,7 +170,7 @@ class ConfigurationRepository extends BaseRepository {
     async deleteConfig(key) {
         try {
             const sql = `DELETE FROM ${this.tableName} WHERE key = ?`;
-            const result = await this.dbAccess.run(sql, [key]);
+            const result = await this.dal.execute(sql, [key]);
             
             return result.changes > 0;
         } catch (error) {

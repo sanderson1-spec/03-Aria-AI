@@ -40,13 +40,13 @@ class SessionRepository extends BaseRepository {
     async validateTables() {
         try {
             // Check sessions table
-            const sessionsExists = await this.dbAccess.queryOne(
+            const sessionsExists = await this.dal.queryOne(
                 'SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?',
                 ['table', this.sessionsTable]
             );
             
             // Check conversation logs table
-            const logsExists = await this.dbAccess.queryOne(
+            const logsExists = await this.dal.queryOne(
                 'SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?',
                 ['table', this.conversationLogsTable]
             );
@@ -70,7 +70,7 @@ class SessionRepository extends BaseRepository {
             this.logger.info('Creating session schema...');
             
             // Sessions table
-            await this.dbAccess.execute(`
+            await this.dal.execute(`
                 CREATE TABLE IF NOT EXISTS ${this.sessionsTable} (
                     id TEXT PRIMARY KEY,
                     agent_type TEXT NOT NULL,
@@ -86,7 +86,7 @@ class SessionRepository extends BaseRepository {
             `);
 
             // Conversation logs table
-            await this.dbAccess.execute(`
+            await this.dal.execute(`
                 CREATE TABLE IF NOT EXISTS ${this.conversationLogsTable} (
                     id TEXT PRIMARY KEY,
                     session_id TEXT NOT NULL,
@@ -118,7 +118,7 @@ class SessionRepository extends BaseRepository {
                 throw new Error('SessionRepository not initialized');
             }
 
-            const sessions = await this.dbAccess.query(
+            const sessions = await this.dal.query(
                 `SELECT * FROM ${this.sessionsTable} WHERE status = ? ORDER BY last_activity DESC`,
                 ['active']
             );
@@ -147,7 +147,7 @@ class SessionRepository extends BaseRepository {
             await this.validateTables();
             
             // Test basic operations
-            const count = await this.dbAccess.queryOne(
+            const count = await this.dal.queryOne(
                 `SELECT COUNT(*) as count FROM ${this.sessionsTable}`
             );
             

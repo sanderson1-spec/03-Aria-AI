@@ -19,7 +19,7 @@ class UserSessionRepository extends BaseRepository {
                 WHERE user_id = ? AND is_active = 1 AND (expires_at IS NULL OR expires_at > datetime('now'))
                 ORDER BY last_active DESC
             `;
-            return await this.dbAccess.queryAll(sql, [userId]);
+            return await this.dal.query(sql, [userId]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to find active sessions for user', { userId });
         }
@@ -98,7 +98,7 @@ class UserSessionRepository extends BaseRepository {
                 WHERE expires_at IS NOT NULL AND expires_at <= datetime('now') AND is_active = 1
             `;
             
-            const result = await this.dbAccess.run(sql, []);
+            const result = await this.dal.execute(sql, []);
             
             if (this.logger) {
                 this.logger.info(`Cleaned up expired sessions`, 'UserSessionRepository', {
@@ -128,7 +128,7 @@ class UserSessionRepository extends BaseRepository {
                 WHERE s.id = ? AND s.is_active = 1
             `;
             
-            return await this.dbAccess.queryOne(sql, [sessionId]);
+            return await this.dal.queryOne(sql, [sessionId]);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get session with user info', { sessionId });
         }
