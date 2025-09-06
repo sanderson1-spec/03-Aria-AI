@@ -18,8 +18,10 @@
  */
 
 const { setupServices, shutdownServices, checkServicesHealth } = require('./setupServices');
+const APIServer = require('./backend/api/server');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -40,7 +42,7 @@ USAGE:
   npm run dev                  # Development mode
 
 OPTIONS:
-  --dev                        # Development mode (verbose logging, test database)
+  --dev                        # Development mode (verbose logging, frontend server)
   --prod                       # Production mode (optimized settings)
   --help, -h                   # Show this help message
 
@@ -158,9 +160,104 @@ async function initializeDatabase(dbPath) {
 }
 
 /**
+ * Start frontend development server
+ */
+async function startFrontendServer() {
+    console.log('🎨 Starting frontend development server...');
+    
+    const frontendPath = path.join(__dirname, 'frontend');
+    
+    // Check if frontend directory exists
+    if (!fs.existsSync(frontendPath)) {
+        console.log('⚠️  Frontend directory not found, skipping frontend server');
+        return null;
+    }
+    
+    // Check if package.json exists in frontend
+    const frontendPackageJson = path.join(frontendPath, 'package.json');
+    if (!fs.existsSync(frontendPackageJson)) {
+        console.log('⚠️  Frontend package.json not found, skipping frontend server');
+        return null;
+    }
+    
+    return new Promise((resolve, reject) => {
+        // Start Vite dev server
+        const viteProcess = spawn('npm', ['run', 'dev'], {
+            cwd: frontendPath,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            shell: true
+        });
+        
+        let serverStarted = false;
+        let startupTimeout;
+        
+        // Set a timeout for server startup
+        startupTimeout = setTimeout(() => {
+            if (!serverStarted) {
+                console.log('⚠️  Frontend server startup timeout - frontend may not be available');
+                console.log('   Try starting frontend manually: cd frontend && npm run dev');
+                resolve(null); // Return null instead of the process
+            }
+        }, 15000); // 15 second timeout
+        
+        viteProcess.stdout.on('data', (data) => {
+            const output = data.toString();
+            
+            // Look for Vite startup confirmation - be more specific
+            if (output.includes('ready in') && output.includes('ms')) {
+                if (!serverStarted) {
+                    serverStarted = true;
+                    clearTimeout(startupTimeout);
+                    
+                    // Wait a moment for the server to fully bind to the port
+                    setTimeout(() => {
+                        console.log('✅ Frontend server started successfully');
+                        
+                        // Extract the local URL if available
+                        const localMatch = output.match(/Local:\s+(http:\/\/[^\s]+)/);
+                        if (localMatch) {
+                            console.log(`🌐 Frontend UI available at: ${localMatch[1]}`);
+                        } else {
+                            console.log('🌐 Frontend UI available at: http://localhost:5173/');
+                            console.log('🌐 Frontend UI also available at: http://127.0.0.1:5173/');
+                        }
+                        
+                        resolve(viteProcess);
+                    }, 1000); // Wait 1 second for port binding
+                }
+            }
+        });
+        
+        viteProcess.stderr.on('data', (data) => {
+            const error = data.toString();
+            // Only log critical errors, ignore warnings
+            if (error.includes('ERROR') || error.includes('EADDRINUSE')) {
+                console.log('⚠️  Frontend server warning:', error.trim());
+            }
+        });
+        
+        viteProcess.on('error', (error) => {
+            clearTimeout(startupTimeout);
+            console.log('⚠️  Frontend server error:', error.message);
+            console.log('   Continuing without frontend server...');
+            resolve(null);
+        });
+        
+        viteProcess.on('exit', (code, signal) => {
+            if (!serverStarted) {
+                clearTimeout(startupTimeout);
+                console.log(`⚠️  Frontend server exited with code ${code}, signal ${signal}`);
+                console.log('   Continuing without frontend server...');
+                resolve(null);
+            }
+        });
+    });
+}
+
+/**
  * Setup graceful shutdown handling
  */
-function setupGracefulShutdown(serviceFactory) {
+function setupGracefulShutdown(serviceFactory, frontendProcess = null, apiServer = null) {
     let shuttingDown = false;
     
     const gracefulShutdown = async (signal) => {
@@ -173,6 +270,27 @@ function setupGracefulShutdown(serviceFactory) {
         console.log(`\n🛑 Received ${signal}, initiating graceful shutdown...`);
         
         try {
+            // Shutdown API server first
+            if (apiServer) {
+                console.log('🌐 Shutting down API server...');
+                await apiServer.stop();
+            }
+            
+            // Shutdown frontend server
+            if (frontendProcess && !frontendProcess.killed) {
+                console.log('🎨 Shutting down frontend server...');
+                frontendProcess.kill('SIGTERM');
+                
+                // Give it a moment to shutdown gracefully
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                if (!frontendProcess.killed) {
+                    console.log('🔨 Force killing frontend server...');
+                    frontendProcess.kill('SIGKILL');
+                }
+            }
+            
+            // Shutdown backend services
             await shutdownServices(serviceFactory);
             console.log('✅ Graceful shutdown completed');
             process.exit(0);
@@ -242,7 +360,29 @@ async function startApplication() {
         
         const serviceFactory = await setupServices(config);
         
-        // Step 5: Health check
+        // Step 5: Start API server
+        console.log('🌐 Starting API server...');
+        let apiServer = null;
+        try {
+            apiServer = new APIServer(serviceFactory);
+            await apiServer.start();
+        } catch (error) {
+            console.log('⚠️  API server startup failed:', error.message);
+            console.log('   API endpoints may not be available');
+        }
+        
+        // Step 6: Start frontend server (in development mode)
+        let frontendProcess = null;
+        if (isDevelopment) {
+            try {
+                frontendProcess = await startFrontendServer();
+            } catch (error) {
+                console.log('⚠️  Frontend server startup failed:', error.message);
+                console.log('   Continuing without frontend server...');
+            }
+        }
+        
+        // Step 7: Health check
         console.log('🏥 Running initial health check...');
         const healthStatus = await checkServicesHealth(serviceFactory);
         
@@ -260,10 +400,10 @@ async function startApplication() {
             console.log('⚠️  Development mode: Starting with unhealthy services (expected for local development)');
         }
         
-        // Step 6: Setup graceful shutdown
-        setupGracefulShutdown(serviceFactory);
+        // Step 8: Setup graceful shutdown
+        setupGracefulShutdown(serviceFactory, frontendProcess, apiServer);
         
-        // Step 7: Application ready
+        // Step 9: Application ready
         console.log('');
         console.log('🎉 Aria AI Application Started Successfully!');
         console.log('');
