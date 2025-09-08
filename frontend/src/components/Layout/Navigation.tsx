@@ -1,7 +1,38 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { CollapsibleConversationList } from './CollapsibleConversationList';
 
-const Navigation: React.FC = () => {
+interface Message {
+  id: string;
+  content: string;
+  sender: 'user' | 'ai';
+  timestamp: Date;
+}
+
+interface Chat {
+  id: string;
+  characterId: string;
+  characterName: string;
+  characterAvatar: string;
+  messages: Message[];
+  createdAt: Date;
+}
+
+interface NavigationProps {
+  chats?: Chat[];
+  currentChat?: Chat | null;
+  onSwitchToChat?: (characterId: string) => void;
+  onCreateNewChat?: () => void;
+  onClearAllChats?: () => void;
+}
+
+const Navigation: React.FC<NavigationProps> = ({
+  chats = [],
+  currentChat = null,
+  onSwitchToChat = () => {},
+  onCreateNewChat = () => {},
+  onClearAllChats = () => {},
+}) => {
   const location = useLocation();
 
   const navItems = [
@@ -30,48 +61,18 @@ const Navigation: React.FC = () => {
         ))}
       </nav>
       
-      <div className="mt-8 p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-blue-100">
-        <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
-          🧠 Aria's Mind
-        </h3>
-        <div className="space-y-3 text-sm">
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600">Mood:</span>
-            <div className="flex items-center space-x-2">
-              <span className="text-lg">😊</span>
-              <span className="text-green-600 font-medium">Positive</span>
-            </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600">Engagement:</span>
-            <div className="flex items-center space-x-2">
-              <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
-              </div>
-              <span className="text-blue-600 font-medium text-xs">High</span>
-            </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600">Energy:</span>
-            <div className="flex items-center space-x-2">
-              <div className="w-20 bg-gray-200 rounded-full h-2">
-                <div className="bg-gradient-to-r from-green-400 to-blue-500 h-2 rounded-full transition-all duration-500" style={{width: '80%'}}></div>
-              </div>
-              <span className="text-xs font-medium text-gray-600">80%</span>
-            </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600">Learning:</span>
-            <div className="flex items-center space-x-2">
-              <span className="text-lg">📚</span>
-              <span className="text-purple-600 font-medium">Active</span>
-            </div>
-          </div>
+      {/* Conversation List - Only show on Chat page */}
+      {location.pathname === '/' && (
+        <div className="mt-6">
+          <CollapsibleConversationList
+            chats={chats}
+            currentChat={currentChat}
+            onSwitchToChat={onSwitchToChat}
+            onCreateNewChat={onCreateNewChat}
+            onClearAllChats={onClearAllChats}
+          />
         </div>
-      </div>
+      )}
     </div>
   );
 };
