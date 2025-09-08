@@ -43,9 +43,10 @@ class TestRunner {
             e2e: []
         };
 
-        // Discover unit tests (services and repositories)
+        // Discover unit tests (services, repositories, and API routes)
         const servicesDir = path.join(testDir, 'services');
         const repositoriesDir = path.join(testDir, 'repositories');
+        const apiDir = path.join(testDir, 'api');
         
         try {
             const serviceFiles = await fs.readdir(servicesDir);
@@ -67,6 +68,17 @@ class TestRunner {
             }
         } catch (error) {
             // Repositories directory might not exist
+        }
+
+        try {
+            const apiFiles = await fs.readdir(apiDir);
+            for (const file of apiFiles) {
+                if (file.endsWith('.test.js')) {
+                    testFiles.unit.push(path.join(apiDir, file));
+                }
+            }
+        } catch (error) {
+            // API directory might not exist
         }
 
         // Discover integration tests
