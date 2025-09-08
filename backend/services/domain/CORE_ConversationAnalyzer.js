@@ -11,6 +11,7 @@
  */
 
 const AbstractService = require('../base/CORE_AbstractService');
+const DateTimeUtils = require('../../utils/datetime_utils');
 
 class EnhancedConversationAnalyzer extends AbstractService {
     constructor(dependencies) {
@@ -279,9 +280,13 @@ Focus on natural conversation flow. Only mark topics as concluded when they're t
         const contextStr = previousMessages.slice(-this.config.contextWindow)
             .map((msg, i) => `${msg.sender}: "${msg.message}"`)
             .join('\n');
+        
+        const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
             
         return `
 Analyze this conversation message for natural flow understanding:
+
+${dateTimeContext}
 
 PREVIOUS CONTEXT:
 ${contextStr}
@@ -301,7 +306,7 @@ Analyze and respond with JSON:
     "reasoning": string
 }
 
-Focus on natural conversation flow and semantic understanding.`;
+Focus on natural conversation flow and semantic understanding. Consider time-based context when analyzing conversation patterns and flow.`;
     }
 
     /**

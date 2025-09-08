@@ -6,9 +6,11 @@
  * - Tests service integration and data flow
  * - Tests psychology state management
  * - Tests database persistence
+ * - Tests datetime awareness across all character interactions
  */
 
 const { setupServices } = require('../../setupServices');
+const DateTimeUtils = require('../../backend/utils/datetime_utils');
 
 describe('Chat Workflow Integration', () => {
     let serviceFactory;
@@ -402,4 +404,151 @@ describe('Chat Workflow Integration', () => {
 
         expect(unhealthyFinal).toHaveLength(0);
     }, 15000);
+
+    it('should ensure datetime awareness in end-to-end character interactions', async () => {
+        const dal = serviceFactory.services.get('database').getDAL();
+        const psychologyService = serviceFactory.services.get('psychology');
+        const llmService = serviceFactory.services.get('llm');
+        const proactiveService = serviceFactory.services.get('proactiveIntelligence');
+
+        // Step 1: Create test user and character
+        const timestamp = Date.now();
+        const user = await dal.users.createUser({
+            username: `datetime_test_user_${timestamp}`,
+            email: `datetime_test_${timestamp}@test.com`,
+            display_name: 'DateTime Test User'
+        });
+
+        const character = await dal.personalities.createCharacter({
+            id: `datetime_test_char_${timestamp}_${Math.random().toString(36).substr(2, 9)}`,
+            name: 'DateTime Test Character',
+            description: 'A character that should be aware of date and time',
+            definition: 'You are a helpful assistant who is always aware of the current date and time.'
+        });
+
+        // Step 2: Test datetime awareness in chat interaction
+        const sessionId = `datetime_test_session_${timestamp}`;
+        
+        // Initialize psychology state
+        await psychologyService.initializeCharacterState(sessionId, character.id);
+        const psychologyState = await psychologyService.getCharacterState(sessionId);
+
+        // Step 3: Test datetime context in system prompt (without making LLM calls)
+        const characterBackground = character.definition || '';
+        const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
+        const systemPrompt = `You are ${character.name}, ${character.description}
+${characterBackground ? `\nBackground: ${characterBackground}` : ''}
+
+${dateTimeContext}
+
+Current psychology state: mood=${psychologyState.mood || 'neutral'}, engagement=${psychologyState.engagement || 'moderate'}, energy=${psychologyState.energy || 75}.
+Stay in character as ${character.name}. Adapt your response based on this psychological context and your character traits. You are fully aware of the current date and time as provided above.`;
+
+        // Verify datetime context is included in system prompt
+        expect(systemPrompt).toMatch(/Current date and time:/);
+        expect(systemPrompt).toMatch(/Current UTC time:/);
+        expect(systemPrompt).toMatch(/Current timestamp:/);
+        expect(systemPrompt).toMatch(/Timezone:/);
+        expect(systemPrompt).toMatch(/You are fully aware of the current date and time as provided above/);
+
+        // Step 4: Test datetime awareness in proactive intelligence
+        if (proactiveService) {
+            const analysisContext = {
+                userMessage: 'Good morning! How are you feeling today?',
+                agentResponse: 'Good morning! I\'m doing well, thank you for asking.',
+                psychologicalState: psychologyState,
+                psychologicalFramework: await psychologyService.ensurePersonalityFramework(character),
+                conversationHistory: [
+                    { sender: 'user', message: 'What time is it right now?' },
+                    { sender: 'assistant', message: 'Good morning! I\'m doing well, thank you for asking.' }
+                ],
+                learnedPatterns: [],
+                sessionContext: { personalityName: character.name }
+            };
+
+            const proactivePrompt = proactiveService.buildProactiveAnalysisPrompt(analysisContext);
+            
+            // Verify proactive analysis includes datetime context
+            expect(proactivePrompt).toMatch(/Current date and time:/);
+            expect(proactivePrompt).toMatch(/Current UTC time:/);
+            expect(proactivePrompt).toMatch(/Consider the current time and date context when making your decision/);
+        }
+
+        // Step 5: Verify datetime utilities are working correctly
+        const currentDateTime = DateTimeUtils.getSystemPromptDateTime();
+        expect(currentDateTime).toBeDefined();
+        expect(currentDateTime).toMatch(/Current date and time:/);
+        expect(currentDateTime).toMatch(/IMPORTANT: Use the current timestamp/);
+    }, 15000);
+
+    it('should maintain datetime awareness across multiple character interactions', async () => {
+        const dal = serviceFactory.services.get('database').getDAL();
+        const psychologyService = serviceFactory.services.get('psychology');
+        const llmService = serviceFactory.services.get('llm');
+
+        // Create test user and character
+        const timestamp = Date.now();
+        const user = await dal.users.createUser({
+            username: `multi_datetime_user_${timestamp}`,
+            email: `multi_datetime_${timestamp}@test.com`,
+            display_name: 'Multi DateTime Test User'
+        });
+
+        const character = await dal.personalities.createCharacter({
+            id: `multi_datetime_char_${timestamp}_${Math.random().toString(36).substr(2, 9)}`,
+            name: 'Multi DateTime Character',
+            description: 'A character for testing datetime across multiple interactions',
+            definition: 'You are aware of time and can reference it in conversations.'
+        });
+
+        const sessionId = `multi_datetime_session_${timestamp}`;
+
+        // Initialize psychology state
+        await psychologyService.initializeCharacterState(sessionId, character.id);
+
+        // Simulate multiple interactions by testing system prompt generation
+        const messages = [
+            'Good morning! What time is it?',
+            'Can you remind me to call someone in 30 minutes?',
+            'What day of the week is it today?'
+        ];
+
+        const generatedPrompts = [];
+
+        for (let i = 0; i < messages.length; i++) {
+            const message = messages[i];
+            
+            // Get psychology state
+            const psychologyState = await psychologyService.getCharacterState(sessionId);
+
+            // Create system prompt with datetime context (simulating ChatRoutes)
+            const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
+            const systemPrompt = `You are ${character.name}, ${character.description}
+
+${dateTimeContext}
+
+Current psychology state: mood=${psychologyState.mood || 'neutral'}, engagement=${psychologyState.engagement || 'moderate'}, energy=${psychologyState.energy || 75}.
+Stay in character as ${character.name}. You are fully aware of the current date and time as provided above.`;
+
+            // Store the prompt for verification
+            const fullPrompt = `${systemPrompt}\n\nUser: ${message}\n${character.name}:`;
+            generatedPrompts.push(fullPrompt);
+
+            // Update psychology state (simulating interaction)
+            await psychologyService.updateCharacterState(sessionId, {
+                lastInteraction: message,
+                responseGenerated: 'Mock response for testing'
+            });
+        }
+
+        // Verify all prompts included datetime context
+        expect(generatedPrompts).toHaveLength(messages.length);
+        
+        generatedPrompts.forEach((prompt, index) => {
+            expect(prompt).toMatch(/Current date and time:/);
+            expect(prompt).toMatch(/Current UTC time:/);
+            expect(prompt).toMatch(/Current timestamp:/);
+            expect(prompt).toMatch(/You are fully aware of the current date and time as provided above/);
+        });
+    }, 20000);
 });

@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const AbstractService = require('../base/CORE_AbstractService');
+const DateTimeUtils = require('../../utils/datetime_utils');
 
 /**
  * Enhanced Psychology Service (formerly DynamicCharacterPsychologyService)
@@ -441,10 +442,13 @@ Convert to proper JSON format.`;
             }
 
             // Create simplified prompt for better JSON compliance
+            const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
             const prompt = `Analyze how this conversation affects ${personality.name}'s psychological state.
 
 Character: ${personality.name}
 Definition: ${personality.definition}
+
+${dateTimeContext}
 
 Current state:
 - Emotion: ${currentState.current_emotion} (intensity: ${currentState.emotional_intensity}/10)
@@ -454,7 +458,7 @@ Current state:
 
 Latest message: "${currentMessage}"
 
-How would this naturally affect their internal state?`;
+How would this naturally affect their internal state? Consider time-of-day factors (morning energy, evening relaxation, etc.) and how the current time might influence their psychological response.`;
 
             const schema = {
                 type: 'object',

@@ -1,5 +1,6 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
+const DateTimeUtils = require('../utils/datetime_utils');
 
 class ChatRoutes {
     constructor(serviceFactory) {
@@ -67,10 +68,14 @@ class ChatRoutes {
 
                 // Prepare context for LLM with character-specific information
                 const characterBackground = character.definition || '';
+                const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
                 const systemPrompt = `You are ${character.name}, ${character.description}
 ${characterBackground ? `\nBackground: ${characterBackground}` : ''}
+
+${dateTimeContext}
+
 Current psychology state: mood=${psychologyState.mood || 'neutral'}, engagement=${psychologyState.engagement || 'moderate'}, energy=${psychologyState.energy || 75}.
-Stay in character as ${character.name}. Adapt your response based on this psychological context and your character traits.`;
+Stay in character as ${character.name}. Adapt your response based on this psychological context and your character traits. You are fully aware of the current date and time as provided above.`;
 
                 // Generate AI response using LLM service (convert to string format)
                 const fullPrompt = `${systemPrompt}\n\nUser: ${message}\n${character.name}:`;

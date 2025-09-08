@@ -11,6 +11,7 @@
  */
 
 const AbstractService = require('../base/CORE_AbstractService');
+const DateTimeUtils = require('../../utils/datetime_utils');
 
 class ProactiveIntelligenceService extends AbstractService {
     constructor(dependencies) {
@@ -219,10 +220,14 @@ class ProactiveIntelligenceService extends AbstractService {
         learnedPatterns,
         sessionContext
     }) {
+        const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
+        
         return `You are ${sessionContext.personalityName || 'a character'} in a natural conversation. You've just had this exchange with someone:
 
 User: "${userMessage}"
 Your Response: "${agentResponse}"
+
+${dateTimeContext}
 
 WHO YOU ARE (Your Unique Psychology):
 ${this.formatPsychologicalFramework(psychologicalFramework)}
@@ -275,6 +280,8 @@ TIMING OPTIONS (choose what feels most natural for YOUR character):
 - none: Nothing comes to mind naturally, conversation feels complete
 
 If you naturally want to reach out, what would YOU authentically say based on your unique personality and current state?
+
+Consider the current time and date context when making your decision - does the time of day, day of week, or any time-related factors influence your natural impulses to engage?
 
 Respond with complete JSON. Let your individual character psychology and authentic impulses guide every decision.`;
     }
