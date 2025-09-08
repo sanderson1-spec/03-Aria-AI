@@ -1,5 +1,5 @@
 import React from 'react';
-import { Message } from '../../types';
+import type { Message } from '../../types';
 import { Bot, User, AlertCircle, Zap } from 'lucide-react';
 import { clsx } from 'clsx';
 

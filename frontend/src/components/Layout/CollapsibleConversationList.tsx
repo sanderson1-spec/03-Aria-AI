@@ -1,19 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 
-interface Message {
-  id: string;
-  content: string;
-  sender: 'user' | 'ai';
-  timestamp: Date;
-}
-
 interface Chat {
   id: string;
   characterId: string;
   characterName: string;
   characterAvatar: string;
-  messages: Message[];
+  messages: any[]; // Use any[] for now to avoid circular type issues
   createdAt: Date;
 }
 
@@ -159,7 +152,7 @@ export const CollapsibleConversationList: React.FC<CollapsibleConversationListPr
                         </div>
                         {chat.messages.length > 1 && (
                           <p className="text-sm text-gray-500 truncate mt-1">
-                            {chat.messages[chat.messages.length - 1].sender === 'user' ? 'You: ' : `${chat.characterName}: `}
+                            {chat.messages[chat.messages.length - 1].type === 'user' ? 'You: ' : `${chat.characterName}: `}
                             {chat.messages[chat.messages.length - 1].content}
                           </p>
                         )}

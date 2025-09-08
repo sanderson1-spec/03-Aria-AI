@@ -1,5 +1,5 @@
 import React from 'react';
-import { PsychologyState } from '../../types';
+import type { PsychologyState } from '../../types';
 import { Brain, Heart, Zap, TrendingUp } from 'lucide-react';
 import { clsx } from 'clsx';
 

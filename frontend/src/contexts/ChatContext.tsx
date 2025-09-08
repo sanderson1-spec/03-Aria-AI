@@ -1,12 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-
-interface Message {
-  id: string;
-  content: string;
-  sender: 'user' | 'ai';
-  timestamp: Date;
-}
+import type { Message } from '../types';
 
 interface Character {
   id: string;
@@ -88,7 +82,10 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
           createdAt: new Date(chat.createdAt),
           messages: chat.messages.map((msg: any) => ({
             ...msg,
-            timestamp: new Date(msg.timestamp)
+            timestamp: new Date(msg.timestamp),
+            // Handle legacy messages that might use 'sender' instead of 'type'
+            type: msg.type || (msg.sender === 'user' ? 'user' : msg.sender === 'ai' ? 'ai' : 'system'),
+            sessionId: msg.sessionId || chat.id
           }))
         }));
         
@@ -155,15 +152,17 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     }
 
     // Create new chat
+    const chatId = `chat-${Date.now()}`;
     const newChat: Chat = {
-      id: `chat-${Date.now()}`,
+      id: chatId,
       characterId: character.id,
       characterName: character.name,
       characterAvatar: character.display,
       messages: [{
         id: '1',
+        sessionId: chatId,
         content: `Hello! I'm ${character.name}. ${character.description}`,
-        sender: 'ai',
+        type: 'ai',
         timestamp: new Date()
       }],
       createdAt: new Date()

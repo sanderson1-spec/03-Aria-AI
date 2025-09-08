@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import CharactersPage from './CharactersPage'
 
@@ -113,7 +113,7 @@ describe('CharactersPage', () => {
     global.confirm = vi.fn(() => true)
     
     // Mock delete API response
-    ;(global.fetch as any).mockImplementation((url, options) => {
+    ;(global.fetch as any).mockImplementation((_url: any, options: any) => {
       if (options?.method === 'DELETE') {
         return Promise.resolve({
           ok: true,
@@ -189,7 +189,7 @@ describe('CharactersPage', () => {
       const user = userEvent.setup()
       
       // Mock create API response
-      ;(global.fetch as any).mockImplementation((url, options) => {
+      ;(global.fetch as any).mockImplementation((_url: any, options: any) => {
         if (options?.method === 'POST') {
           return Promise.resolve({
             ok: true,
@@ -257,7 +257,7 @@ describe('CharactersPage', () => {
       const user = userEvent.setup()
       
       // Mock update API response
-      ;(global.fetch as any).mockImplementation((url, options) => {
+      ;(global.fetch as any).mockImplementation((_url: any, options: any) => {
         if (options?.method === 'PUT') {
           return Promise.resolve({
             ok: true,
