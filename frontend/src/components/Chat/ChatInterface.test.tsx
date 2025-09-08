@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ChatInterface } from './ChatInterface'
-import { ChatSession, Message, Character } from '../../types'
+import type { ChatSession, Message, Character } from '../../types'
 
 // Mock data
 const mockCharacter: Character = {
@@ -11,15 +11,12 @@ const mockCharacter: Character = {
   tagline: 'Your friendly AI assistant',
   description: 'A helpful AI companion',
   definition: 'Background information',
-  display: 'aria-avatar.jpg',
-  usage_count: 5,
-  is_active: true,
-  created_at: '2024-01-01T00:00:00Z',
-  updated_at: '2024-01-01T00:00:00Z'
+  createdAt: new Date('2024-01-01T00:00:00Z'),
+  updatedAt: new Date('2024-01-01T00:00:00Z')
 }
 
 const mockPsychologyState = {
-  mood: 'happy' as const,
+  mood: 'positive' as const,
   engagement: 'high' as const,
   energy: 85,
   learningProgress: {
@@ -30,24 +27,25 @@ const mockPsychologyState = {
 
 const mockSession: ChatSession = {
   id: 'session-1',
+  userId: 'user-1',
+  characterId: 'aria-1',
   character: mockCharacter,
-  psychologyState: mockPsychologyState,
-  createdAt: new Date('2024-01-01T00:00:00Z'),
-  updatedAt: new Date('2024-01-01T00:00:00Z')
+  lastActivity: new Date('2024-01-01T00:00:00Z'),
+  psychologyState: mockPsychologyState
 }
 
 const mockMessages: Message[] = [
   {
     id: '1',
     content: 'Hello!',
-    sender: 'user',
+    type: 'user',
     timestamp: new Date('2024-01-01T10:00:00Z'),
     sessionId: 'session-1'
   },
   {
     id: '2',
     content: 'Hi there! How can I help you today?',
-    sender: 'ai',
+    type: 'ai',
     timestamp: new Date('2024-01-01T10:00:01Z'),
     sessionId: 'session-1'
   }
@@ -134,7 +132,7 @@ describe('ChatInterface', () => {
 
     // Psychology state should be handled
     expect(mockSession.psychologyState).toBeDefined()
-    expect(mockSession.psychologyState.mood).toBe('happy')
+    expect(mockSession.psychologyState?.mood).toBe('positive')
   })
 
   it('sends message when form is submitted', async () => {

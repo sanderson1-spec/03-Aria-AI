@@ -13,6 +13,8 @@
     "test:generate": "node tests/generate-tests.js",
     "test:verbose": "NODE_ENV=test jest --verbose",
     "test:watch": "NODE_ENV=test jest --watch",
+    "test:cleanup": "node tests/test-cleanup.js",
+    "test:all": "node tests/run-all-tests.js",
     "setup": "node setupServices.js",
     "validate": "node validate-services.js",
     "health": "node -e \"require('./setupServices').checkServicesHealth().then(h => console.log(JSON.stringify(h, null, 2)))\""

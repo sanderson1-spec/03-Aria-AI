@@ -12,12 +12,6 @@ interface Character {
   updated_at: string;
 }
 
-interface CharacterDefinition {
-  background: string;
-  avatar: string | null;
-  personality_traits: string[];
-  conversation_style: string;
-}
 
 const CharactersPage: React.FC = () => {
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -48,18 +42,6 @@ const CharactersPage: React.FC = () => {
     }
   };
 
-  const parseDefinition = (definition: string): CharacterDefinition => {
-    try {
-      return JSON.parse(definition);
-    } catch {
-      return {
-        background: '',
-        avatar: null,
-        personality_traits: [],
-        conversation_style: 'friendly'
-      };
-    }
-  };
 
   const deleteCharacter = async (characterId: string) => {
     if (!confirm('Are you sure you want to delete this character?')) return;

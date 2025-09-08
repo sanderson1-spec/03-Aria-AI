@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Send, Plus } from 'lucide-react';
-import { Message, ChatSession, Character } from '../../types';
+import type { Message, ChatSession } from '../../types';
 import { MessageList } from './MessageList';
 import { PsychologyIndicators } from './PsychologyIndicators';
 

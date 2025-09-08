@@ -9,6 +9,7 @@
 
 const { setupServices } = require('../../setupServices');
 const http = require('http');
+const TestDataCleanup = require('../test-cleanup');
 
 describe('Full Application E2E Workflow', () => {
     let serviceFactory;
@@ -16,9 +17,13 @@ describe('Full Application E2E Workflow', () => {
     const baseFrontendUrl = 'http://localhost:5173';
 
     beforeAll(async () => {
-        // Setup services for E2E tests
+        // Clean up any existing test data
+        const cleanup = new TestDataCleanup();
+        await cleanup.cleanup();
+        
+        // Setup services for E2E tests - use in-memory database for isolation
         serviceFactory = await setupServices({
-            dbPath: './database/test_e2e_aria.db',
+            dbPath: ':memory:',
             includeMetadata: false
         });
 
@@ -29,6 +34,14 @@ describe('Full Application E2E Workflow', () => {
     afterAll(async () => {
         if (serviceFactory) {
             await serviceFactory.shutdown();
+        }
+        
+        // Clean up any test data that might have been created
+        try {
+            const cleanup = new TestDataCleanup();
+            await cleanup.cleanup();
+        } catch (error) {
+            console.warn('Post-test cleanup warning:', error.message);
         }
     });
 

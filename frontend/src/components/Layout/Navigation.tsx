@@ -2,19 +2,12 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CollapsibleConversationList } from './CollapsibleConversationList';
 
-interface Message {
-  id: string;
-  content: string;
-  sender: 'user' | 'ai';
-  timestamp: Date;
-}
-
 interface Chat {
   id: string;
   characterId: string;
   characterName: string;
   characterAvatar: string;
-  messages: Message[];
+  messages: any[]; // Use any[] for now to avoid circular type issues
   createdAt: Date;
 }
 

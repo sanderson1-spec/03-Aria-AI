@@ -3,6 +3,8 @@
  * Configures test environment for Aria AI
  */
 
+const TestDataCleanup = require('./test-cleanup');
+
 // Set test environment
 process.env.NODE_ENV = 'test';
 process.env.LOG_LEVEL = 'silent'; // Suppress all logging in tests
@@ -16,16 +18,33 @@ const originalConsoleLog = console.log;
 const originalConsoleWarn = console.warn;
 const originalConsoleError = console.error;
 
-beforeAll(() => {
+beforeAll(async () => {
     console.log = jest.fn();
     console.warn = jest.fn();
     console.error = jest.fn();
+    
+    // Clean up any existing test data before running tests
+    try {
+        const cleanup = new TestDataCleanup();
+        await cleanup.cleanup();
+    } catch (error) {
+        // Don't fail tests if cleanup fails, just warn
+        console.warn('Pre-test cleanup warning:', error.message);
+    }
 });
 
-afterAll(() => {
+afterAll(async () => {
     console.log = originalConsoleLog;
     console.warn = originalConsoleWarn;
     console.error = originalConsoleError;
+    
+    // Clean up test data after all tests complete
+    try {
+        const cleanup = new TestDataCleanup();
+        await cleanup.cleanup();
+    } catch (error) {
+        console.warn('Post-test cleanup warning:', error.message);
+    }
 });
 
 // Global test utilities

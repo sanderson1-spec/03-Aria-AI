@@ -37,11 +37,27 @@ BACKEND_TESTS_PASSED=0
 FRONTEND_TESTS_PASSED=0
 TOTAL_FAILURES=0
 
+# Function to clean up test data
+cleanup_test_data() {
+    print_status "Cleaning up test data..."
+    
+    cd "$(dirname "$0")"
+    
+    if node tests/test-cleanup.js; then
+        print_success "Test data cleanup completed!"
+    else
+        print_warning "Test data cleanup had warnings (this is usually fine)"
+    fi
+}
+
 # Function to run backend tests
 run_backend_tests() {
     print_status "Running Backend Tests..."
     
     cd "$(dirname "$0")"
+    
+    # Clean up before tests
+    cleanup_test_data
     
     if node tests/run-all-tests.js; then
         print_success "Backend tests passed!"
@@ -50,6 +66,9 @@ run_backend_tests() {
         print_error "Backend tests failed!"
         TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
     fi
+    
+    # Clean up after tests
+    cleanup_test_data
 }
 
 # Function to run frontend tests
@@ -175,6 +194,10 @@ main() {
         print_error "❌ Frontend Tests: FAILED"
     fi
     
+    # Final cleanup regardless of test results
+    print_status "Running final cleanup..."
+    cleanup_test_data
+    
     if [ $TOTAL_FAILURES -eq 0 ]; then
         print_success "🎉 All tests passed! Your application is ready for deployment!"
         exit 0
@@ -208,6 +231,10 @@ case "${1:-}" in
         print_status "Running architecture validation only..."
         run_architecture_validation
         ;;
+    "cleanup")
+        print_status "Running test data cleanup only..."
+        cleanup_test_data
+        ;;
     "help"|"-h"|"--help")
         echo "Aria AI Test Runner"
         echo ""
@@ -219,6 +246,7 @@ case "${1:-}" in
         echo "  coverage    Run tests with coverage report"
         echo "  lint        Run linting only"
         echo "  validate    Run architecture validation only"
+        echo "  cleanup     Clean up test data only"
         echo "  help        Show this help message"
         echo ""
         echo "No command runs the full test suite"

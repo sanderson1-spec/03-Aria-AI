@@ -17,6 +17,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const TestDataCleanup = require('./test-cleanup');
 
 class TestFramework {
     constructor() {
@@ -45,15 +46,35 @@ class TestFramework {
         
         const startTime = Date.now();
         
-        // Run tests by type in order: unit -> integration -> e2e
-        await this.runTestsByType('unit');
-        await this.runTestsByType('integration'); 
-        await this.runTestsByType('e2e');
-        
-        const duration = Date.now() - startTime;
-        this.printSummary(duration);
-        
-        return this.getOverallSuccess();
+        try {
+            // Clean up any existing test data before starting
+            console.log('🧹 Pre-test cleanup...');
+            const cleanup = new TestDataCleanup();
+            await cleanup.cleanup();
+            console.log('');
+            
+            // Run tests by type in order: unit -> integration -> e2e
+            await this.runTestsByType('unit');
+            await this.runTestsByType('integration'); 
+            await this.runTestsByType('e2e');
+            
+            const duration = Date.now() - startTime;
+            this.printSummary(duration);
+            
+            return this.getOverallSuccess();
+            
+        } finally {
+            // Always clean up test data after tests, regardless of success/failure
+            console.log('\n🧹 Post-test cleanup...');
+            try {
+                const cleanup = new TestDataCleanup();
+                await cleanup.cleanup();
+                console.log('✅ Test data cleanup completed\n');
+            } catch (error) {
+                console.warn('⚠️  Post-test cleanup failed:', error.message);
+                console.warn('Please run: node tests/test-cleanup.js\n');
+            }
+        }
     }
 
     /**

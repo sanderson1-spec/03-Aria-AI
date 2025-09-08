@@ -1,13 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CollapsiblePsychologySection } from './CollapsiblePsychologySection';
 import { useChatContext } from '../../contexts/ChatContext';
-
-interface Message {
-  id: string;
-  content: string;
-  sender: 'user' | 'ai';
-  timestamp: Date;
-}
+import type { Message } from '../../types';
 
 const ChatPage: React.FC = () => {
   const {
@@ -53,8 +47,9 @@ const ChatPage: React.FC = () => {
     // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
+      sessionId: currentChat.id,
       content: inputValue.trim(),
-      sender: 'user',
+      type: 'user',
       timestamp: new Date()
     };
     
@@ -67,9 +62,26 @@ const ChatPage: React.FC = () => {
     setInputValue('');
     setIsTyping(true);
     
+    // Create a streaming AI message placeholder
+    const aiMessageId = (Date.now() + 1).toString();
+    const streamingMessage: Message = {
+      id: aiMessageId,
+      sessionId: currentChat.id,
+      content: '',
+      type: 'ai',
+      timestamp: new Date(),
+      isStreaming: true
+    };
+    
+    // Add streaming message placeholder
+    const messagesWithStreaming = [...newMessages, streamingMessage];
+    const chatWithStreaming = { ...currentChat, messages: messagesWithStreaming };
+    setCurrentChat(chatWithStreaming);
+    setChats(prev => prev.map(chat => chat.id === currentChat.id ? chatWithStreaming : chat));
+    
     try {
-      // Call real API
-      const response = await fetch('http://localhost:3001/api/chat/message', {
+      // Use fetch with streaming handling
+      const response = await fetch('http://localhost:3001/api/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -82,48 +94,97 @@ const ChatPage: React.FC = () => {
         })
       });
 
-      const data = await response.json();
-      
-      if (data.success) {
-        const aiMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          content: data.data.aiResponse,
-          sender: 'ai',
-          timestamp: new Date()
-        };
-        const finalMessages = [...newMessages, aiMessage];
-        const finalChat = { ...currentChat, messages: finalMessages };
-        setCurrentChat(finalChat);
-        setChats(prev => prev.map(chat => chat.id === currentChat.id ? finalChat : chat));
-        
-        // Update psychology state if provided
-        if (data.data.psychologyState) {
-          console.log('Psychology state updated:', data.data.psychologyState);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+          
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                
+                if (data.type === 'chunk') {
+                  fullContent = data.fullContent;
+                  
+                  // Update the streaming message with new content
+                  setCurrentChat(prevChat => {
+                    if (!prevChat) return prevChat;
+                    
+                    const updatedMessages = prevChat.messages.map(msg => 
+                      msg.id === aiMessageId 
+                        ? { ...msg, content: fullContent, isStreaming: true }
+                        : msg
+                    );
+                    
+                    const updatedChat = { ...prevChat, messages: updatedMessages };
+                    setChats(prev => prev.map(chat => chat.id === prevChat.id ? updatedChat : chat));
+                    return updatedChat;
+                  });
+                } else if (data.type === 'complete') {
+                  // Mark streaming as complete
+                  setCurrentChat(prevChat => {
+                    if (!prevChat) return prevChat;
+                    
+                    const updatedMessages = prevChat.messages.map(msg => 
+                      msg.id === aiMessageId 
+                        ? { ...msg, content: data.fullResponse, isStreaming: false }
+                        : msg
+                    );
+                    
+                    const updatedChat = { ...prevChat, messages: updatedMessages };
+                    setChats(prev => prev.map(chat => chat.id === prevChat.id ? updatedChat : chat));
+                    return updatedChat;
+                  });
+                  
+                  // Update psychology state if provided
+                  if (data.psychologyState) {
+                    console.log('Psychology state updated:', data.psychologyState);
+                  }
+                } else if (data.type === 'error') {
+                  throw new Error(data.error);
+                }
+              } catch (parseError) {
+                // Skip malformed JSON
+                console.warn('Failed to parse streaming data:', parseError);
+              }
+            }
+          }
         }
-      } else {
-        const errorMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          content: `Sorry, I encountered an error: ${data.error}`,
-          sender: 'ai',
-          timestamp: new Date()
-        };
-        const errorMessages = [...newMessages, errorMessage];
-        const errorChat = { ...currentChat, messages: errorMessages };
-        setCurrentChat(errorChat);
-        setChats(prev => prev.map(chat => chat.id === currentChat.id ? errorChat : chat));
       }
     } catch (error) {
-      console.error('API Error:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: "Sorry, I couldn't connect to the server. Please try again.",
-        sender: 'ai',
-        timestamp: new Date()
-      };
-      const errorMessages = [...newMessages, errorMessage];
-      const errorChat = { ...currentChat, messages: errorMessages };
-      setCurrentChat(errorChat);
-      setChats(prev => prev.map(chat => chat.id === currentChat.id ? errorChat : chat));
+      console.error('Streaming API Error:', error);
+      
+      // Update the streaming message to show error
+      setCurrentChat(prevChat => {
+        if (!prevChat) return prevChat;
+        
+        const updatedMessages = prevChat.messages.map(msg => 
+          msg.id === aiMessageId 
+            ? { 
+                ...msg, 
+                content: "Sorry, I couldn't connect to the server. Please try again.",
+                isStreaming: false 
+              }
+            : msg
+        );
+        
+        const updatedChat = { ...prevChat, messages: updatedMessages };
+        setChats(prev => prev.map(chat => chat.id === prevChat.id ? updatedChat : chat));
+        return updatedChat;
+      });
     } finally {
       setIsTyping(false);
     }
@@ -187,30 +248,30 @@ const ChatPage: React.FC = () => {
           <>
             {currentChat.messages.map((message) => (
               <div key={message.id} className={`flex items-start space-x-3 ${
-                message.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+                message.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''
               }`}>
                 {/* Avatar */}
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  message.sender === 'user' 
+                  message.type === 'user' 
                     ? 'bg-blue-500 text-white' 
                     : 'bg-gradient-to-br from-purple-500 to-pink-500 text-white'
                 }`}>
-                  {message.sender === 'user' ? '👤' : '🤖'}
+                  {message.type === 'user' ? '👤' : '🤖'}
                 </div>
                 
                 {/* Message Bubble */}
                 <div className={`max-w-xs lg:max-w-md xl:max-w-lg ${
-                  message.sender === 'user' ? 'items-end' : 'items-start'
+                  message.type === 'user' ? 'items-end' : 'items-start'
                 }`}>
                   <div className={`px-4 py-3 rounded-2xl shadow-sm ${
-                    message.sender === 'user'
+                    message.type === 'user'
                       ? 'bg-blue-500 text-white rounded-br-md'
                       : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md'
                   }`}>
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
                   </div>
                   <div className={`text-xs text-gray-500 mt-1 ${
-                    message.sender === 'user' ? 'text-right' : 'text-left'
+                    message.type === 'user' ? 'text-right' : 'text-left'
                   }`}>
                     {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
