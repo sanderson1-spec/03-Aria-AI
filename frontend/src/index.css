@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for chat application */
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+}
+
+@layer components {
+  .chat-message {
+    @apply p-4 rounded-lg mb-3 max-w-3xl;
+  }
+  
+  .chat-message.user {
+    @apply bg-primary-500 text-white ml-auto;
+  }
+  
+  .chat-message.ai {
+    @apply bg-secondary-100 text-gray-800 mr-auto;
+  }
+  
+  .psychology-indicator {
+    @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium;
+  }
+  
+  .psychology-indicator.positive {
+    @apply bg-green-100 text-green-800;
+  }
+  
+  .psychology-indicator.neutral {
+    @apply bg-gray-100 text-gray-800;
+  }
+  
+  .psychology-indicator.negative {
+    @apply bg-red-100 text-red-800;
+  }
+}

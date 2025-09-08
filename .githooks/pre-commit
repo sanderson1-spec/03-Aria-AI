@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Check for CORE_ file modifications
+CORE_FILES=$(git diff --cached --name-only | grep "CORE_")
+
+if [ ! -z "$CORE_FILES" ]; then
+    # Check for bypass file or environment variable
+    if [ -f ".bypass-core" ] || [ "$BYPASS_CORE_PROTECTION" = "true" ]; then
+        echo "✅ CORE service modification authorized"
+        
+        # Auto-remove the bypass file after use (one-time use)
+        if [ -f ".bypass-core" ]; then
+            rm .bypass-core
+            echo "🧹 Bypass file automatically removed"
+        fi
+    else
+        echo "🚨 ERROR: Attempting to modify CORE service files:"
+        echo "$CORE_FILES"
+        echo ""
+        echo "To proceed, create a bypass file:"
+        echo "touch .bypass-core"
+        echo "Then commit normally in your GUI"
+        echo ""
+        echo "(The bypass file will be automatically removed after commit)"
+        exit 1
+    fi
+fi
+
+# SMARTER SQL CHECK: Ignore comments and only catch real violations
+SQL_VIOLATIONS=$(git diff --cached | grep -E "^\+.*\.(query|run|get|all|execute)\(" | \
+    grep -v "/repositories/" | \
+    grep -v "^\+.*//.*\.(query|run|get|all|execute)\(" | \
+    grep -v "^\+.*\*.*\.(query|run|get|all|execute)\(" | \
+    grep -v "^\+[[:space:]]*//.*\.(query|run|get|all|execute)\(" | \
+    grep -v "^\+[[:space:]]*\*.*\.(query|run|get|all|execute)\(")
+
+if [ ! -z "$SQL_VIOLATIONS" ]; then
+    echo "🚨 ERROR: SQL found outside repository layer:"
+    echo "$SQL_VIOLATIONS"
+    echo ""
+    echo "This violates clean architecture. Move SQL to appropriate repository."
+    echo "Note: Commented SQL is allowed for examples"
+    exit 1
+fi
+
+echo "✅ Architecture checks passed"
