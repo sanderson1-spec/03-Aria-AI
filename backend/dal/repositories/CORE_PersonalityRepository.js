@@ -17,13 +17,12 @@ class PersonalityRepository extends BaseRepository {
         try {
             const offset = (page - 1) * pageSize;
             
-            const personalities = await this.dal.findAll(this.tableName, {
-                orderBy: 'updated_at DESC',
-                limit: pageSize,
-                offset: offset
-            });
+            const personalities = await this.dal.query(
+                `SELECT * FROM ${this.tableName} ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+                [pageSize, offset]
+            );
 
-            const totalCount = await this.dal.count(this.tableName);
+            const totalCount = await this.count();
 
             return {
                 personalities,
@@ -52,11 +51,11 @@ class PersonalityRepository extends BaseRepository {
                 created_at: this.getCurrentTimestamp(),
                 updated_at: this.getCurrentTimestamp(),
                 usage_count: 0,
-                is_active: true
+                is_active: 1
             };
 
-            const result = await this.dal.insertOrReplace(this.tableName, data);
-            return { created: result.changes > 0, id: personality.id };
+            const result = await this.dal.create(this.tableName, data);
+            return { created: true, id: result.id };
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to create personality');
         }
@@ -225,11 +224,10 @@ class PersonalityRepository extends BaseRepository {
      */
     async getRecentlyActive(limit = 5) {
         try {
-            return await this.dal.findAll(this.tableName, {
-                columns: ['id', 'name', 'display', 'description', 'usage_count', 'is_active', 'created_at', 'updated_at'],
-                orderBy: 'updated_at DESC',
-                limit: limit
-            });
+            return await this.dal.query(
+                `SELECT id, name, display, description, usage_count, is_active, created_at, updated_at FROM ${this.tableName} ORDER BY updated_at DESC LIMIT ?`,
+                [limit]
+            );
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get recently active personalities');
         }
@@ -241,13 +239,9 @@ class PersonalityRepository extends BaseRepository {
      */
     async getUsageStats() {
         try {
-            const stats = await this.dal.findAll(this.tableName, {
-                columns: [
-                    'id', 'name', 'display', 'usage_count', 'is_active', 'created_at', 'updated_at',
-                    'description', 'definition'
-                ],
-                orderBy: 'usage_count DESC'
-            });
+            const stats = await this.dal.query(
+                `SELECT id, name, display, usage_count, is_active, created_at, updated_at, description, definition FROM ${this.tableName} ORDER BY usage_count DESC`
+            );
 
             return stats.map(personality => ({
                 ...personality,
@@ -264,10 +258,10 @@ class PersonalityRepository extends BaseRepository {
      */
     async getFullDetails(personalityId) {
         try {
-            const personality = await this.dal.findOne(this.tableName, {
-                columns: ['id', 'name', 'display', 'description', 'usage_count', 'is_active', 'created_at'],
-                conditions: { id: personalityId }
-            });
+            const personality = await this.dal.queryOne(
+                `SELECT id, name, display, description, usage_count, is_active, created_at FROM ${this.tableName} WHERE id = ?`,
+                [personalityId]
+            );
 
             if (!personality) {
                 return null;
@@ -279,17 +273,18 @@ class PersonalityRepository extends BaseRepository {
                 psychologicalState,
                 recentInteractions
             ] = await Promise.all([
-                this.dal.findOne('character_psychological_frameworks', {
-                    conditions: { personality_id: personalityId }
-                }),
-                this.dal.findOne('character_psychological_state', {
-                    conditions: { personality_id: personalityId }
-                }),
-                this.dal.findAll('llm_interactions', {
-                    conditions: { personality_id: personalityId },
-                    orderBy: 'created_at DESC',
-                    limit: 5
-                })
+                this.dal.queryOne(
+                    'SELECT * FROM character_psychological_frameworks WHERE personality_id = ?',
+                    [personalityId]
+                ),
+                this.dal.queryOne(
+                    'SELECT * FROM character_psychological_state WHERE personality_id = ?',
+                    [personalityId]
+                ),
+                this.dal.query(
+                    'SELECT * FROM llm_interactions WHERE personality_id = ? ORDER BY created_at DESC LIMIT 5',
+                    [personalityId]
+                )
             ]);
 
             return {
@@ -300,6 +295,134 @@ class PersonalityRepository extends BaseRepository {
             };
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get personality full details');
+        }
+    }
+
+    // === CHARACTER MANAGEMENT METHODS ===
+    // Following existing architecture: personalities are global, not user-specific
+    
+    /**
+     * Get all available characters (global personalities)
+     * CLEAN ARCHITECTURE: Domain layer entity retrieval
+     */
+    async getAllCharacters() {
+        try {
+            return await this.findAll({ is_active: 1 }, 'updated_at DESC');
+        } catch (error) {
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to get all characters');
+        }
+    }
+
+    /**
+     * Get a specific character by ID
+     * CLEAN ARCHITECTURE: Domain layer entity retrieval
+     */
+    async getCharacter(characterId) {
+        try {
+            this.validateRequiredFields({ characterId }, ['characterId'], 'get character');
+            
+            return await this.findById(characterId);
+        } catch (error) {
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to get character');
+        }
+    }
+
+    /**
+     * Create a new global character
+     * CLEAN ARCHITECTURE: Domain layer entity creation
+     */
+    async createCharacter(characterData) {
+        try {
+            this.validateRequiredFields(characterData, ['id', 'name'], 'create character');
+
+            const data = {
+                id: characterData.id,
+                name: characterData.name,
+                display: characterData.avatar || 'default.png',
+                description: characterData.description || '',
+                definition: characterData.background || '',
+                personality_traits: JSON.stringify({
+                    core_traits: [],
+                    emotional_range: [],
+                    learning_style: 'adaptive',
+                    relationship_approach: 'friendly'
+                }),
+                communication_style: JSON.stringify({
+                    default_tone: 'friendly',
+                    adaptability: 'moderate',
+                    formality_range: ['casual', 'professional'],
+                    humor_level: 'moderate',
+                    emotional_expression: 'authentic'
+                }),
+                created_at: this.getCurrentTimestamp(),
+                updated_at: this.getCurrentTimestamp(),
+                usage_count: 0,
+                is_active: 1
+            };
+
+            const result = await this.create(data);
+            return { created: true, id: result.id };
+        } catch (error) {
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to create character');
+        }
+    }
+
+    /**
+     * Update an existing character
+     * CLEAN ARCHITECTURE: Domain layer entity update
+     */
+    async updateCharacter(characterId, updateData) {
+        try {
+            this.validateRequiredFields({ characterId }, ['characterId'], 'update character');
+
+            if (!updateData || Object.keys(updateData).length === 0) {
+                throw new Error('Update data cannot be empty');
+            }
+
+            // Get current character data to merge with updates
+            const currentCharacter = await this.getCharacter(characterId);
+            if (!currentCharacter) {
+                throw new Error('Character not found');
+            }
+            
+            const data = {
+                updated_at: this.getCurrentTimestamp()
+            };
+
+            if (updateData.name !== undefined) {
+                data.name = updateData.name;
+            }
+            if (updateData.description !== undefined) {
+                data.description = updateData.description;
+            }
+            if (updateData.background !== undefined) {
+                data.definition = updateData.background;
+            }
+            if (updateData.avatar !== undefined) {
+                data.display = updateData.avatar || 'default.png';
+            }
+
+            const result = await this.update(data, { id: characterId });
+            
+            return { updated: result.changes > 0 };
+        } catch (error) {
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to update character');
+        }
+    }
+
+    /**
+     * Delete a character (admin/creator only - global operation)
+     * CLEAN ARCHITECTURE: Domain layer entity deletion
+     */
+    async deleteCharacter(characterId) {
+        try {
+            this.validateRequiredFields({ characterId }, ['characterId'], 'delete character');
+
+            const result = await this.update({ is_active: 0 }, { id: characterId });
+            
+            return { deleted: result.changes > 0 };
+        } catch (error) {
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to delete character');
         }
     }
 }

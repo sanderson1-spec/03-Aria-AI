@@ -31,25 +31,32 @@ class ChatRoutes {
                 }
 
                 // Get services
-                const llmService = this.serviceFactory.getService('llm');
-                const psychologyService = this.serviceFactory.getService('psychology');
-                const conversationService = this.serviceFactory.getService('conversationAnalyzer');
-                const databaseService = this.serviceFactory.getService('database');
+                const llmService = this.serviceFactory.get('llm');
+                const psychologyService = this.serviceFactory.get('psychology');
+                const conversationService = this.serviceFactory.get('conversationAnalyzer');
+                const databaseService = this.serviceFactory.get('database');
 
                 // Create or get session
                 const actualSessionId = sessionId || uuidv4();
 
                 // Save user message to database
-                const userMessageId = uuidv4();
-                await databaseService.getDAL().conversations.create('conversations', {
-                    id: userMessageId,
-                    session_id: actualSessionId,
-                    user_id: userId,
-                    sender: 'user',
-                    content: message,
-                    timestamp: new Date().toISOString(),
-                    message_type: 'text'
-                });
+                const userMessageId = await databaseService.getDAL().conversations.saveMessage(
+                    actualSessionId, 
+                    'user', 
+                    message, 
+                    'chat',
+                    { user_id: userId, message_type: 'text' }
+                );
+
+                // Get character information
+                const character = await databaseService.getDAL().personalities.getCharacter(characterId);
+                if (!character) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        error: 'Character not found',
+                        details: `Character with ID ${characterId} does not exist`
+                    });
+                }
 
                 // Get current psychology state
                 let psychologyState = await psychologyService.getCharacterState(actualSessionId);
@@ -58,28 +65,25 @@ class ChatRoutes {
                     psychologyState = await psychologyService.initializeCharacterState(userId, characterId);
                 }
 
-                // Prepare context for LLM
-                const systemPrompt = `You are Aria, a sophisticated AI assistant with advanced psychological understanding. 
+                // Prepare context for LLM with character-specific information
+                const characterBackground = character.definition || '';
+                const systemPrompt = `You are ${character.name}, ${character.description}
+${characterBackground ? `\nBackground: ${characterBackground}` : ''}
 Current psychology state: mood=${psychologyState.mood || 'neutral'}, engagement=${psychologyState.engagement || 'moderate'}, energy=${psychologyState.energy || 75}.
-Adapt your response based on this psychological context. Be helpful, empathetic, and engaging.`;
+Stay in character as ${character.name}. Adapt your response based on this psychological context and your character traits.`;
 
-                // Generate AI response using LLM service
-                const aiResponse = await llmService.generateResponse([
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: message }
-                ]);
+                // Generate AI response using LLM service (convert to string format)
+                const fullPrompt = `${systemPrompt}\n\nUser: ${message}\n${character.name}:`;
+                const aiResponse = await llmService.generateResponse(fullPrompt);
 
                 // Save AI response to database
-                const aiMessageId = uuidv4();
-                await databaseService.getDAL().conversations.create('conversations', {
-                    id: aiMessageId,
-                    session_id: actualSessionId,
-                    user_id: userId,
-                    sender: 'ai',
-                    content: aiResponse.content || aiResponse,
-                    timestamp: new Date().toISOString(),
-                    message_type: 'text'
-                });
+                const aiMessageId = await databaseService.getDAL().conversations.saveMessage(
+                    actualSessionId,
+                    'assistant', 
+                    aiResponse.content || aiResponse,
+                    'chat',
+                    { user_id: userId, message_type: 'text' }
+                );
 
                 // Update psychology state based on interaction
                 const updatedPsychology = await psychologyService.updateCharacterState(
@@ -117,7 +121,7 @@ Adapt your response based on this psychological context. Be helpful, empathetic,
                 const { sessionId } = req.params;
                 const { userId = 'default-user' } = req.query;
 
-                const databaseService = this.serviceFactory.getService('database');
+                const databaseService = this.serviceFactory.get('database');
                 const messages = await databaseService.getDAL().conversations.query(
                     'SELECT * FROM conversations WHERE session_id = ? AND user_id = ? ORDER BY timestamp ASC',
                     [sessionId, userId]
@@ -142,7 +146,7 @@ Adapt your response based on this psychological context. Be helpful, empathetic,
             try {
                 const { sessionId } = req.params;
                 
-                const psychologyService = this.serviceFactory.getService('psychology');
+                const psychologyService = this.serviceFactory.get('psychology');
                 const psychologyState = await psychologyService.getCharacterState(sessionId);
 
                 res.json({

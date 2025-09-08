@@ -114,29 +114,23 @@ class ConversationRepository extends BaseRepository {
      * DOMAIN LAYER: Save a new message with analysis data
      * Core message storage with comprehensive metadata
      */
-    async saveMessage(sessionId, sender, message, agentType, analysisData = {}) {
+    async saveMessage(sessionId, sender, message, agentType = 'chat', analysisData = {}) {
         this.validateRequiredFields(
-            { sessionId, sender, message, agentType }, 
-            ['sessionId', 'sender', 'message', 'agentType'], 
+            { sessionId, sender, message }, 
+            ['sessionId', 'sender', 'message'], 
             'save message'
         );
 
         const messageData = this.sanitizeData({
-            session_id: sessionId,
-            sender: sender,
-            message: message,
-            agent_type: agentType,
-            timestamp: this.getCurrentTimestamp(),
-            created_at: this.getCurrentTimestamp(),
-            
-            // Analysis data (only include if columns exist after migration)
-            topic_id: analysisData.topicId || null,
-            is_topic_conclusion: analysisData.isTopicConclusion || false,
-            relevance_score: analysisData.relevanceScore || 100,
-            message_type: analysisData.messageType || 'statement'
+            chat_id: sessionId,  // Use chat_id instead of session_id
+            role: sender,        // Use role instead of sender  
+            content: message,    // Use content instead of message
+            user_id: analysisData.user_id || 'default-user',  // Add required user_id
+            metadata: JSON.stringify(analysisData || {}),  // Store analysis data as JSON metadata
+            timestamp: this.getCurrentTimestamp()
         });
 
-        const result = await super.create(messageData);
+        const result = await super.create(messageData, 'conversation_logs');
         
         return {
             ...result,

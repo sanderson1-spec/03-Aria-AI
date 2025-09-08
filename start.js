@@ -23,10 +23,10 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
-// Parse command line arguments
+// Parse command line arguments (these will be re-evaluated in startApplication)
 const args = process.argv.slice(2);
-const isDevelopment = args.includes('--dev') || process.env.NODE_ENV === 'development';
-const isProduction = args.includes('--prod') || process.env.NODE_ENV === 'production';
+let isDevelopment = args.includes('--dev') || process.env.NODE_ENV === 'development';
+let isProduction = args.includes('--prod') || process.env.NODE_ENV === 'production';
 const showHelp = args.includes('--help') || args.includes('-h');
 
 /**
@@ -181,11 +181,12 @@ async function startFrontendServer() {
     }
     
     return new Promise((resolve, reject) => {
-        // Start Vite dev server
-        const viteProcess = spawn('npm', ['run', 'dev'], {
+        // Start Vite dev server with specific port
+        const viteProcess = spawn('npm', ['run', 'dev', '--', '--port', '5173', '--host', '0.0.0.0'], {
             cwd: frontendPath,
             stdio: ['ignore', 'pipe', 'pipe'],
-            shell: true
+            shell: true,
+            env: { ...process.env, FORCE_COLOR: '1' }
         });
         
         let serverStarted = false;
@@ -202,9 +203,10 @@ async function startFrontendServer() {
         
         viteProcess.stdout.on('data', (data) => {
             const output = data.toString();
+            console.log(`[Frontend] ${output.trim()}`); // Always show frontend output for debugging
             
-            // Look for Vite startup confirmation - be more specific
-            if (output.includes('ready in') && output.includes('ms')) {
+            // Look for Vite startup confirmation - be more flexible
+            if (output.includes('ready in') || (output.includes('Local:') && output.includes('5173'))) {
                 if (!serverStarted) {
                     serverStarted = true;
                     clearTimeout(startupTimeout);
@@ -230,10 +232,7 @@ async function startFrontendServer() {
         
         viteProcess.stderr.on('data', (data) => {
             const error = data.toString();
-            // Only log critical errors, ignore warnings
-            if (error.includes('ERROR') || error.includes('EADDRINUSE')) {
-                console.log('⚠️  Frontend server warning:', error.trim());
-            }
+            console.log(`[Frontend Error] ${error.trim()}`); // Show all stderr for debugging
         });
         
         viteProcess.on('error', (error) => {
@@ -323,8 +322,15 @@ function setupGracefulShutdown(serviceFactory, frontendProcess = null, apiServer
  */
 async function startApplication() {
     try {
+        // Re-evaluate development mode in case environment variables were set after file load
+        const currentArgs = process.argv.slice(2);
+        isDevelopment = currentArgs.includes('--dev') || process.env.NODE_ENV === 'development';
+        isProduction = currentArgs.includes('--prod') || process.env.NODE_ENV === 'production';
+        
         console.log('🤖 Starting Aria AI Chat Application...');
         console.log(`📍 Mode: ${isDevelopment ? 'Development' : 'Production'}`);
+        console.log(`📍 NODE_ENV: ${process.env.NODE_ENV}`);
+        console.log(`📍 Args: ${currentArgs.join(', ')}`);
         console.log(`📁 Working Directory: ${__dirname}`);
         console.log('');
         

@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const ChatRoutes = require('./chatRoutes');
+const SettingsRoutes = require('./settingsRoutes');
+const CharactersRoutes = require('./charactersRoutes');
 
 class APIServer {
     constructor(serviceFactory, port = 3001) {
@@ -42,6 +44,14 @@ class APIServer {
         // Chat routes
         const chatRoutes = new ChatRoutes(this.serviceFactory);
         this.app.use('/api/chat', chatRoutes.getRouter());
+
+        // Settings routes
+        const settingsRoutes = new SettingsRoutes(this.serviceFactory);
+        this.app.use('/api/settings', settingsRoutes.getRouter());
+
+        // Characters routes
+        const charactersRoutes = new CharactersRoutes(this.serviceFactory);
+        this.app.use('/api/characters', charactersRoutes.getRouter());
 
         // 404 handler
         this.app.use((req, res) => {

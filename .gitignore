@@ -257,3 +257,4 @@ backend/utils/.DS_Store
 .cursor/rules/aria-ai-rules.mdc
 /.cursor
 .bypass-core
+*.db

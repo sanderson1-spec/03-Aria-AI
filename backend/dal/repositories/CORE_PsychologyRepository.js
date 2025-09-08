@@ -226,7 +226,7 @@ class PsychologyRepository extends BaseRepository {
             ) VALUES (?, ?, ?, ?)
         `;
         
-        return await this.query(sql, [
+        return await this.dal.query(sql, [
             personalityId,
             JSON.stringify(framework),
             version,
@@ -244,7 +244,7 @@ class PsychologyRepository extends BaseRepository {
             'get psychology framework'
         );
         
-        const result = await this.queryOne(
+        const result = await this.dal.queryOne(
             'SELECT * FROM character_psychological_frameworks WHERE personality_id = ?',
             [personalityId]
         );
@@ -270,7 +270,7 @@ class PsychologyRepository extends BaseRepository {
             'get framework with metadata'
         );
         
-        const result = await this.queryOne(
+        const result = await this.dal.queryOne(
             'SELECT * FROM character_psychological_frameworks WHERE personality_id = ?',
             [personalityId]
         );
@@ -300,9 +300,14 @@ class PsychologyRepository extends BaseRepository {
             'update psychological state'
         );
 
+        // Get user_id from session
+        const session = await this.dal.queryOne('SELECT user_id FROM sessions WHERE id = ?', [sessionId]);
+        const userId = session ? session.user_id : 'default-user';
+
         const stateRecord = {
             session_id: sessionId,
             personality_id: personalityId,
+            user_id: userId,
             current_emotion: stateData.current_emotion || 'neutral',
             emotional_intensity: stateData.emotional_intensity || 5,
             energy_level: stateData.energy_level || 5,
@@ -319,16 +324,17 @@ class PsychologyRepository extends BaseRepository {
 
         const sql = `
             INSERT OR REPLACE INTO character_psychological_state (
-                session_id, personality_id, current_emotion, emotional_intensity, 
+                session_id, personality_id, user_id, current_emotion, emotional_intensity, 
                 energy_level, stress_level, current_motivations, relationship_dynamic,
                 active_interests, communication_mode, internal_state_notes,
                 last_updated, change_reason, state_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
-        return await this.query(sql, [
+        return await this.dal.query(sql, [
             stateRecord.session_id,
             stateRecord.personality_id,
+            stateRecord.user_id,
             stateRecord.current_emotion,
             stateRecord.emotional_intensity,
             stateRecord.energy_level,
@@ -354,7 +360,7 @@ class PsychologyRepository extends BaseRepository {
             'get psychological state'
         );
         
-        const result = await this.queryOne(
+        const result = await this.dal.queryOne(
             'SELECT * FROM character_psychological_state WHERE session_id = ?',
             [sessionId]
         );
@@ -396,7 +402,7 @@ class PsychologyRepository extends BaseRepository {
             WHERE cps.session_id = ?
         `;
 
-        const result = await this.queryOne(sql, [sessionId]);
+        const result = await this.dal.queryOne(sql, [sessionId]);
         
         if (result) {
             try {
@@ -449,7 +455,7 @@ class PsychologyRepository extends BaseRepository {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
-        const result = await this.query(sql, [
+        const result = await this.dal.query(sql, [
             memoryWeight.id,
             memoryWeight.session_id,
             memoryWeight.message_id,
@@ -493,7 +499,7 @@ class PsychologyRepository extends BaseRepository {
             LIMIT ?
         `;
 
-        const results = await this.query(sql, [sessionId, limit]);
+        const results = await this.dal.query(sql, [sessionId, limit]);
         
         // Parse JSON fields
         return results.map(result => {
@@ -525,7 +531,7 @@ class PsychologyRepository extends BaseRepository {
             WHERE session_id = ? AND message_id = ?
         `;
 
-        return await this.query(sql, [
+        return await this.dal.query(sql, [
             this.getCurrentTimestamp(),
             this.getCurrentTimestamp(),
             sessionId,
@@ -569,7 +575,7 @@ class PsychologyRepository extends BaseRepository {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
-        const result = await this.query(sql, [
+        const result = await this.dal.query(sql, [
             evolutionLog.id,
             evolutionLog.session_id,
             evolutionLog.personality_id,
@@ -603,7 +609,7 @@ class PsychologyRepository extends BaseRepository {
             LIMIT ?
         `;
 
-        const results = await this.query(sql, [sessionId, limit]);
+        const results = await this.dal.query(sql, [sessionId, limit]);
         
         // Parse JSON fields
         return results.map(result => {
@@ -654,7 +660,7 @@ class PsychologyRepository extends BaseRepository {
             LIMIT ?
         `;
 
-        const results = await this.query(sql, [sessionId, maxMessages]);
+        const results = await this.dal.query(sql, [sessionId, maxMessages]);
         
         // Parse JSON fields and format for psychology analysis
         return results.map(result => {
@@ -700,7 +706,7 @@ class PsychologyRepository extends BaseRepository {
             WHERE cps.personality_id = ?
         `;
 
-        const result = await this.queryOne(sql, [personalityId]);
+        const result = await this.dal.queryOne(sql, [personalityId]);
         return result || {};
     }
 
@@ -723,7 +729,7 @@ class PsychologyRepository extends BaseRepository {
             LIMIT ?
         `;
 
-        return await this.query(sql, [limit]);
+        return await this.dal.query(sql, [limit]);
     }
 }
 
