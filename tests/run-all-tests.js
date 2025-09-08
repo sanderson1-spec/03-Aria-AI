@@ -14,6 +14,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
+const TestDataCleanup = require('./test-cleanup');
 
 class TestRunner {
     constructor() {
@@ -309,8 +310,36 @@ class TestRunner {
 
 // CLI execution
 if (require.main === module) {
-    const runner = new TestRunner();
-    runner.run();
+    async function runWithCleanup() {
+        console.log('🧹 Pre-test cleanup...');
+        try {
+            const cleanup = new TestDataCleanup();
+            await cleanup.cleanup();
+            console.log('✅ Pre-test cleanup completed\n');
+        } catch (error) {
+            console.warn('⚠️  Pre-test cleanup warning:', error.message, '\n');
+        }
+        
+        const runner = new TestRunner();
+        const success = await runner.run();
+        
+        console.log('\n🧹 Post-test cleanup...');
+        try {
+            const cleanup = new TestDataCleanup();
+            await cleanup.cleanup();
+            console.log('✅ Post-test cleanup completed');
+        } catch (error) {
+            console.warn('⚠️  Post-test cleanup warning:', error.message);
+            console.warn('Please run manually: node tests/test-cleanup.js');
+        }
+        
+        process.exit(success ? 0 : 1);
+    }
+    
+    runWithCleanup().catch(error => {
+        console.error('Test runner failed:', error);
+        process.exit(1);
+    });
 }
 
 const { MockFactory, TestDatabaseHelper, ArchitectureAssertions } = require('./test-framework');
