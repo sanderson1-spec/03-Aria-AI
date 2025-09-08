@@ -377,15 +377,13 @@ async function startApplication() {
             console.log('   API endpoints may not be available');
         }
         
-        // Step 6: Start frontend server (in development mode)
+        // Step 6: Start frontend server (ALWAYS - in both development and production)
         let frontendProcess = null;
-        if (isDevelopment) {
-            try {
-                frontendProcess = await startFrontendServer();
-            } catch (error) {
-                console.log('⚠️  Frontend server startup failed:', error.message);
-                console.log('   Continuing without frontend server...');
-            }
+        try {
+            frontendProcess = await startFrontendServer();
+        } catch (error) {
+            console.log('⚠️  Frontend server startup failed:', error.message);
+            console.log('   Continuing without frontend server...');
         }
         
         // Step 7: Health check
