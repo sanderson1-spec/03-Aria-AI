@@ -32,6 +32,7 @@ interface ChatContextType {
   setShowNewChatModal: React.Dispatch<React.SetStateAction<boolean>>;
   switchToCharacterChat: (characterId: string) => void;
   createNewChat: (character: Character) => void;
+  deleteChat: (chatId: string) => void;
   clearAllChats: () => void;
   loadCharacters: () => Promise<void>;
   loadSavedChats: () => void;
@@ -68,6 +69,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   useEffect(() => {
     if (chats.length > 0) {
       saveChatsToStorage();
+    } else {
+      // If no chats left, remove from localStorage
+      localStorage.removeItem('aria-chats');
     }
   }, [chats]);
 
@@ -115,7 +119,22 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     }
   };
 
+  const deleteChat = (chatId: string) => {
+    // Remove the specific chat from the list
+    const updatedChats = chats.filter(chat => chat.id !== chatId);
+    setChats(updatedChats);
+    
+    // If the deleted chat was the current chat, clear current chat
+    if (currentChat && currentChat.id === chatId) {
+      setCurrentChat(null);
+      localStorage.removeItem('aria-current-chat-id');
+    }
+    
+    // Note: localStorage update is handled by the auto-save useEffect
+  };
+
   const clearAllChats = () => {
+    console.log('🧹 clearAllChats called - DELETING ALL CHATS');
     setChats([]);
     setCurrentChat(null);
     localStorage.removeItem('aria-chats');
@@ -195,6 +214,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     setShowNewChatModal,
     switchToCharacterChat,
     createNewChat,
+    deleteChat,
     clearAllChats,
     loadCharacters,
     loadSavedChats,

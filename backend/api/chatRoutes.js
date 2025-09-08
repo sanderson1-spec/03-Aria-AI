@@ -90,24 +90,84 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     { user_id: userId, message_type: 'text' }
                 );
 
-                // Update psychology state based on interaction
-                const updatedPsychology = await psychologyService.updateCharacterState(
-                    actualSessionId, 
-                    { 
-                        lastInteraction: message,
-                        responseGenerated: aiResponse.content || aiResponse 
-                    }
-                );
-
-                // Return response
+                // Return response IMMEDIATELY (user sees response fast)
                 res.json({
                     success: true,
                     data: {
                         sessionId: actualSessionId,
                         aiResponse: aiResponse.content || aiResponse,
-                        psychologyState: updatedPsychology,
+                        psychologyState: psychologyState, // Send current state immediately
                         userMessageId,
                         aiMessageId
+                    }
+                });
+
+                // 🎯 ASYNCHRONOUS BACKGROUND PROCESSING (non-streaming version)
+                setImmediate(async () => {
+                    try {
+                        // Get services for background processing
+                        const conversationService = this.serviceFactory.get('conversationAnalyzer');
+                        const proactiveIntelligence = this.serviceFactory.get('proactiveIntelligence');
+                        const proactiveLearning = this.serviceFactory.get('proactiveLearning');
+                        
+                        // Get conversation history for analysis
+                        const conversationHistory = await databaseService.getDAL().conversations.getSessionHistory(actualSessionId, 10, 0);
+                        
+                        // Background analysis (same as streaming version)
+                        const psychologyAnalysisPromise = psychologyService.updateCharacterState(
+                            actualSessionId, 
+                            { 
+                                lastInteraction: message,
+                                responseGenerated: aiResponse.content || aiResponse 
+                            }
+                        ).catch(error => {
+                            console.error('Background psychology update failed:', error);
+                        });
+
+                        const conversationAnalysisPromise = conversationService.analyzeConversationFlow(
+                            conversationHistory,
+                            message
+                        ).catch(error => {
+                            console.error('Background conversation analysis failed:', error);
+                        });
+
+                        const proactiveAnalysisPromise = proactiveIntelligence.analyzeForProactiveOpportunities({
+                            userMessage: message,
+                            agentResponse: aiResponse.content || aiResponse,
+                            psychologicalState: psychologyState,
+                            conversationHistory: conversationHistory,
+                            sessionContext: {
+                                sessionId: actualSessionId,
+                                userId: userId,
+                                personalityId: characterId,
+                                personalityName: character.name
+                            }
+                        }).catch(error => {
+                            console.error('Background proactive analysis failed:', error);
+                        });
+
+                        const learningPromise = proactiveLearning.extractPatternsFromEngagement({
+                            sessionId: actualSessionId,
+                            userId: userId,
+                            personalityId: characterId,
+                            userMessage: message,
+                            agentResponse: aiResponse.content || aiResponse,
+                            outcome: 'success'
+                        }).catch(error => {
+                            console.error('Background learning analysis failed:', error);
+                        });
+
+                        await Promise.allSettled([
+                            psychologyAnalysisPromise,
+                            conversationAnalysisPromise,
+                            proactiveAnalysisPromise,
+                            learningPromise
+                        ]);
+
+                        console.log(`Background analysis completed for session ${actualSessionId}`);
+
+                    } catch (error) {
+                        console.error('Background processing error:', error);
                     }
                 });
 
@@ -120,7 +180,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
             }
         });
 
-        // Send a chat message with streaming
+        // Send a chat message with streaming (OPTIMIZED FOR FAST USER RESPONSE)
         this.router.post('/stream', async (req, res) => {
             try {
                 const { message, sessionId, userId = 'default-user', characterId = 'aria' } = req.body;
@@ -141,11 +201,15 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                 // Get services
                 const llmService = this.serviceFactory.get('llm');
                 const psychologyService = this.serviceFactory.get('psychology');
+                const conversationService = this.serviceFactory.get('conversationAnalyzer');
+                const proactiveIntelligence = this.serviceFactory.get('proactiveIntelligence');
+                const proactiveLearning = this.serviceFactory.get('proactiveLearning');
                 const databaseService = this.serviceFactory.get('database');
 
                 // Create or get session
                 const actualSessionId = sessionId || uuidv4();
 
+                // FAST OPERATIONS: Do these immediately
                 // Save user message to database
                 const userMessageId = await databaseService.getDAL().conversations.saveMessage(
                     actualSessionId, 
@@ -162,7 +226,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     userMessageId
                 })}\n\n`);
 
-                // Get character information
+                // Get character information (fast database lookup)
                 const character = await databaseService.getDAL().personalities.getCharacter(characterId);
                 if (!character) {
                     res.write(`data: ${JSON.stringify({
@@ -174,10 +238,10 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     return;
                 }
 
-                // Get current psychology state
+                // Get current psychology state (fast database lookup)
                 let psychologyState = await psychologyService.getCharacterState(actualSessionId);
                 if (!psychologyState) {
-                    // Initialize psychology state for new session
+                    // Initialize psychology state for new session (fast)
                     psychologyState = await psychologyService.initializeCharacterState(userId, characterId);
                 }
 
@@ -194,7 +258,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
 
                 let fullAiResponse = '';
 
-                // Generate streaming AI response
+                // Generate streaming AI response (USER SEES THIS IMMEDIATELY)
                 const fullPrompt = `${systemPrompt}\n\nUser: ${message}\n${character.name}:`;
                 
                 await llmService.generateStreamingResponse(
@@ -212,7 +276,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     }
                 );
 
-                // Save AI response to database
+                // Save AI response to database (fast)
                 const aiMessageId = await databaseService.getDAL().conversations.saveMessage(
                     actualSessionId,
                     'assistant', 
@@ -221,24 +285,83 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     { user_id: userId, message_type: 'text' }
                 );
 
-                // Update psychology state based on interaction
-                const updatedPsychology = await psychologyService.updateCharacterState(
-                    actualSessionId, 
-                    { 
-                        lastInteraction: message,
-                        responseGenerated: fullAiResponse 
-                    }
-                );
-
-                // Send completion message
+                // Send completion message IMMEDIATELY (user sees response is complete)
                 res.write(`data: ${JSON.stringify({
                     type: 'complete',
                     aiMessageId,
-                    psychologyState: updatedPsychology,
+                    psychologyState: psychologyState, // Send current state immediately
                     fullResponse: fullAiResponse
                 })}\n\n`);
 
                 res.end();
+
+                // 🎯 ASYNCHRONOUS BACKGROUND PROCESSING (AFTER user sees response)
+                // This runs without blocking the user experience
+                setImmediate(async () => {
+                    try {
+                        // Get conversation history for analysis
+                        const conversationHistory = await databaseService.getDAL().conversations.getSessionHistory(actualSessionId, 10, 0);
+                        
+                        // 1. PSYCHOLOGY ANALYSIS & UPDATE (background)
+                        const psychologyAnalysisPromise = psychologyService.analyzeAndUpdateState(
+                            actualSessionId,
+                            conversationHistory,
+                            message,
+                            character
+                        ).catch(error => {
+                            console.error('Background psychology analysis failed:', error);
+                        });
+
+                        // 2. CONVERSATION ANALYSIS (background)
+                        const conversationAnalysisPromise = conversationService.analyzeConversationFlow(
+                            conversationHistory,
+                            message
+                        ).catch(error => {
+                            console.error('Background conversation analysis failed:', error);
+                        });
+
+                        // 3. PROACTIVE INTELLIGENCE ANALYSIS (background)
+                        const proactiveAnalysisPromise = proactiveIntelligence.analyzeForProactiveOpportunities({
+                            userMessage: message,
+                            agentResponse: fullAiResponse,
+                            psychologicalState: psychologyState,
+                            conversationHistory: conversationHistory,
+                            sessionContext: {
+                                sessionId: actualSessionId,
+                                userId: userId,
+                                personalityId: characterId,
+                                personalityName: character.name
+                            }
+                        }).catch(error => {
+                            console.error('Background proactive analysis failed:', error);
+                        });
+
+                        // 4. LEARNING PATTERN EXTRACTION (background)
+                        const learningPromise = proactiveLearning.extractPatternsFromEngagement({
+                            sessionId: actualSessionId,
+                            userId: userId,
+                            personalityId: characterId,
+                            userMessage: message,
+                            agentResponse: fullAiResponse,
+                            outcome: 'success' // Assume success for now
+                        }).catch(error => {
+                            console.error('Background learning analysis failed:', error);
+                        });
+
+                        // Wait for all background analyses to complete
+                        await Promise.allSettled([
+                            psychologyAnalysisPromise,
+                            conversationAnalysisPromise,
+                            proactiveAnalysisPromise,
+                            learningPromise
+                        ]);
+
+                        console.log(`Background analysis completed for session ${actualSessionId}`);
+
+                    } catch (error) {
+                        console.error('Background processing error:', error);
+                    }
+                });
 
             } catch (error) {
                 console.error('Chat Streaming API Error:', error);

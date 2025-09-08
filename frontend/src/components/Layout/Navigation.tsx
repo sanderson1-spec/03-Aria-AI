@@ -15,16 +15,16 @@ interface NavigationProps {
   chats?: Chat[];
   currentChat?: Chat | null;
   onSwitchToChat?: (characterId: string) => void;
+  onDeleteChat?: (chatId: string) => void;
   onCreateNewChat?: () => void;
-  onClearAllChats?: () => void;
 }
 
 const Navigation: React.FC<NavigationProps> = ({
   chats = [],
   currentChat = null,
   onSwitchToChat = () => {},
+  onDeleteChat = () => {},
   onCreateNewChat = () => {},
-  onClearAllChats = () => {},
 }) => {
   const location = useLocation();
 
@@ -61,8 +61,8 @@ const Navigation: React.FC<NavigationProps> = ({
             chats={chats}
             currentChat={currentChat}
             onSwitchToChat={onSwitchToChat}
+            onDeleteChat={onDeleteChat}
             onCreateNewChat={onCreateNewChat}
-            onClearAllChats={onClearAllChats}
           />
         </div>
       )}

@@ -11,7 +11,7 @@ const AppContent: React.FC = () => {
     chats,
     currentChat,
     switchToCharacterChat,
-    clearAllChats,
+    deleteChat,
     setShowNewChatModal,
   } = useChatContext();
 
@@ -21,8 +21,8 @@ const AppContent: React.FC = () => {
         chats={chats}
         currentChat={currentChat}
         onSwitchToChat={switchToCharacterChat}
+        onDeleteChat={deleteChat}
         onCreateNewChat={() => setShowNewChatModal(true)}
-        onClearAllChats={clearAllChats}
       />
       <Routes>
         <Route path="/" element={<ChatPage />} />
