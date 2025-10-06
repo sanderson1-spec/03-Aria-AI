@@ -144,7 +144,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   const loadCharacters = async () => {
     setIsLoadingCharacters(true);
     try {
-      const response = await fetch('http://localhost:3001/api/characters');
+      const response = await fetch('http://localhost:3002/api/characters');
       const data = await response.json();
       if (data.success) {
         setCharacters(data.data);

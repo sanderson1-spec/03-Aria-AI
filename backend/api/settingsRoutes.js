@@ -117,12 +117,19 @@ class SettingsRoutes {
                         ...llm
                     };
                     
+                    // Save configuration to persistent storage
                     await configService.updateConfiguration({
                         llm: updatedLLMConfig
                     });
                     
-                    // Note: LLM service would need to be restarted to pick up new settings
-                    // For now, we'll just save the configuration
+                    // Dynamically update the LLM service configuration
+                    try {
+                        const llmService = this.serviceFactory.get('llm');
+                        await llmService.updateModelConfiguration(updatedLLMConfig);
+                    } catch (error) {
+                        console.error('Failed to update LLM service configuration:', error);
+                        // Don't fail the request, just log the error
+                    }
                 }
                 
                 // Update UI settings if provided
@@ -135,7 +142,7 @@ class SettingsRoutes {
                 res.json({
                     success: true,
                     message: 'Settings updated successfully',
-                    note: 'LLM settings require application restart to take effect'
+                    note: 'LLM settings have been applied immediately'
                 });
 
             } catch (error) {

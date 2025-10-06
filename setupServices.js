@@ -35,6 +35,8 @@ const PsychologyService = require('./backend/services/domain/CORE_PsychologyServ
 const ConversationAnalyzer = require('./backend/services/domain/CORE_ConversationAnalyzer');
 const ProactiveIntelligenceService = require('./backend/services/domain/CORE_ProactiveIntelligenceService');
 const ProactiveLearningService = require('./backend/services/domain/CORE_ProactiveLearningService');
+const ProactiveDeliveryService = require('./backend/services/domain/ProactiveDeliveryService');
+const BackgroundAnalysisService = require('./backend/services/domain/BackgroundAnalysisService');
 
 // Repository Classes
 const ChatRepository = require('./backend/dal/repositories/CORE_ChatRepository');
@@ -346,6 +348,17 @@ async function setupServices(config = {}) {
         // Proactive Learning Service - Learning from proactive interactions
         serviceFactory.registerService('proactiveLearning', ProactiveLearningService, [
             'database', 'structuredResponse', 'logger', 'errorHandling'
+        ]);
+
+        // Proactive Delivery Service - Handles actual delivery of proactive messages
+        serviceFactory.registerService('proactiveDelivery', ProactiveDeliveryService, [
+            'database', 'proactiveIntelligence', 'proactiveLearning', 'logger', 'errorHandling'
+        ]);
+
+        // Background Analysis Service - Handles all post-message background processing
+        serviceFactory.registerService('backgroundAnalysis', BackgroundAnalysisService, [
+            'database', 'logger', 'psychology', 'conversationAnalyzer', 'proactiveIntelligence', 
+            'proactiveDelivery', 'proactiveLearning'
         ]);
 
         // ===== INITIALIZE ALL SERVICES =====

@@ -143,6 +143,7 @@ class ProactiveIntelligenceService extends AbstractService {
                 'should_engage_proactively',
                 'engagement_timing', 
                 'psychological_reasoning',
+                'proactive_message_content',
                 'confidence_score'
             ],
             properties: {
@@ -281,7 +282,17 @@ TIMING OPTIONS (choose what feels most natural for YOUR character):
 
 If you naturally want to reach out, what would YOU authentically say based on your unique personality and current state?
 
+**IMPORTANT: If you decide to engage proactively (should_engage_proactively = true), you MUST provide the exact message content in the proactive_message_content field. This is the actual message that will be sent to the user.**
+
 Consider the current time and date context when making your decision - does the time of day, day of week, or any time-related factors influence your natural impulses to engage?
+
+**REQUIRED JSON FIELDS:**
+- should_engage_proactively: true/false
+- engagement_timing: one of the timing options above
+- psychological_reasoning: detailed explanation of your decision
+- proactive_message_content: the exact message to send (or null if not engaging)
+- confidence_score: 0.0 to 1.0
+- context_analysis: object with emotional_state_influence, relationship_factor, conversation_flow_assessment, learned_pattern_application
 
 Respond with complete JSON. Let your individual character psychology and authentic impulses guide every decision.`;
     }
@@ -438,10 +449,24 @@ IMPORTANT: Interpret these states through the lens of YOUR unique personality fr
         // Validate boolean fields
         decision.should_engage_proactively = Boolean(rawDecision.should_engage_proactively);
         
-        // Validate timing enum
+        // Validate timing enum - support natural language responses
         const validTimings = ['immediate', 'wait_30_seconds', 'wait_2_minutes', 'wait_5_minutes', 'wait_later', 'none'];
-        decision.engagement_timing = validTimings.includes(rawDecision.engagement_timing) 
-            ? rawDecision.engagement_timing 
+        const naturalLanguageTimings = {
+            'later today': 'wait_later',
+            'in a few hours': 'wait_later', 
+            'tomorrow': 'wait_later',
+            'soon': 'wait_5_minutes',
+            'in a bit': 'wait_5_minutes',
+            'later': 'wait_later'
+        };
+        
+        let timing = rawDecision.engagement_timing;
+        if (naturalLanguageTimings[timing]) {
+            timing = naturalLanguageTimings[timing];
+        }
+        
+        decision.engagement_timing = validTimings.includes(timing) 
+            ? timing 
             : 'none';
         
         // Validate text fields
@@ -463,6 +488,11 @@ IMPORTANT: Interpret these states through the lens of YOUR unique personality fr
         // Safety checks
         if (decision.should_engage_proactively && decision.engagement_timing === 'none') {
             decision.engagement_timing = 'immediate';
+        }
+
+        // Ensure proactive message content is present when engaging
+        if (decision.should_engage_proactively && (!decision.proactive_message_content || decision.proactive_message_content.trim() === '')) {
+            decision.proactive_message_content = 'I wanted to check in with you. How are you doing?';
         }
 
         if (!decision.should_engage_proactively) {

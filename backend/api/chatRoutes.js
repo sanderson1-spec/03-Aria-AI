@@ -102,72 +102,21 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     }
                 });
 
-                // 🎯 ASYNCHRONOUS BACKGROUND PROCESSING (non-streaming version)
+                // 🎯 CLEAN BACKGROUND PROCESSING - Single service call (non-streaming version)
                 setImmediate(async () => {
                     try {
-                        // Get services for background processing
-                        const conversationService = this.serviceFactory.get('conversationAnalyzer');
-                        const proactiveIntelligence = this.serviceFactory.get('proactiveIntelligence');
-                        const proactiveLearning = this.serviceFactory.get('proactiveLearning');
-                        
-                        // Get conversation history for analysis
-                        const conversationHistory = await databaseService.getDAL().conversations.getSessionHistory(actualSessionId, 10, 0);
-                        
-                        // Background analysis (same as streaming version)
-                        const psychologyAnalysisPromise = psychologyService.updateCharacterState(
-                            actualSessionId, 
-                            { 
-                                lastInteraction: message,
-                                responseGenerated: aiResponse.content || aiResponse 
-                            }
-                        ).catch(error => {
-                            console.error('Background psychology update failed:', error);
-                        });
-
-                        const conversationAnalysisPromise = conversationService.analyzeConversationFlow(
-                            conversationHistory,
-                            message
-                        ).catch(error => {
-                            console.error('Background conversation analysis failed:', error);
-                        });
-
-                        const proactiveAnalysisPromise = proactiveIntelligence.analyzeForProactiveOpportunities({
-                            userMessage: message,
-                            agentResponse: aiResponse.content || aiResponse,
-                            psychologicalState: psychologyState,
-                            conversationHistory: conversationHistory,
-                            sessionContext: {
-                                sessionId: actualSessionId,
-                                userId: userId,
-                                personalityId: characterId,
-                                personalityName: character.name
-                            }
-                        }).catch(error => {
-                            console.error('Background proactive analysis failed:', error);
-                        });
-
-                        const learningPromise = proactiveLearning.extractPatternsFromEngagement({
+                        const backgroundAnalysis = this.serviceFactory.get('backgroundAnalysis');
+                        await backgroundAnalysis.processMessageAnalysis({
                             sessionId: actualSessionId,
                             userId: userId,
-                            personalityId: characterId,
+                            characterId: characterId,
                             userMessage: message,
-                            agentResponse: aiResponse.content || aiResponse,
-                            outcome: 'success'
-                        }).catch(error => {
-                            console.error('Background learning analysis failed:', error);
+                            aiResponse: aiResponse.content || aiResponse,
+                            psychologyState: psychologyState,
+                            character: character
                         });
-
-                        await Promise.allSettled([
-                            psychologyAnalysisPromise,
-                            conversationAnalysisPromise,
-                            proactiveAnalysisPromise,
-                            learningPromise
-                        ]);
-
-                        console.log(`Background analysis completed for session ${actualSessionId}`);
-
                     } catch (error) {
-                        console.error('Background processing error:', error);
+                        console.error('Background analysis failed:', error);
                     }
                 });
 
@@ -295,71 +244,24 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
 
                 res.end();
 
-                // 🎯 ASYNCHRONOUS BACKGROUND PROCESSING (AFTER user sees response)
-                // This runs without blocking the user experience
+                // 🎯 CLEAN BACKGROUND PROCESSING - Single service call
+                // This runs asynchronously without blocking the user experience
                 setImmediate(async () => {
                     try {
-                        // Get conversation history for analysis
-                        const conversationHistory = await databaseService.getDAL().conversations.getSessionHistory(actualSessionId, 10, 0);
-                        
-                        // 1. PSYCHOLOGY ANALYSIS & UPDATE (background)
-                        const psychologyAnalysisPromise = psychologyService.analyzeAndUpdateState(
-                            actualSessionId,
-                            conversationHistory,
-                            message,
-                            character
-                        ).catch(error => {
-                            console.error('Background psychology analysis failed:', error);
-                        });
-
-                        // 2. CONVERSATION ANALYSIS (background)
-                        const conversationAnalysisPromise = conversationService.analyzeConversationFlow(
-                            conversationHistory,
-                            message
-                        ).catch(error => {
-                            console.error('Background conversation analysis failed:', error);
-                        });
-
-                        // 3. PROACTIVE INTELLIGENCE ANALYSIS (background)
-                        const proactiveAnalysisPromise = proactiveIntelligence.analyzeForProactiveOpportunities({
-                            userMessage: message,
-                            agentResponse: fullAiResponse,
-                            psychologicalState: psychologyState,
-                            conversationHistory: conversationHistory,
-                            sessionContext: {
-                                sessionId: actualSessionId,
-                                userId: userId,
-                                personalityId: characterId,
-                                personalityName: character.name
-                            }
-                        }).catch(error => {
-                            console.error('Background proactive analysis failed:', error);
-                        });
-
-                        // 4. LEARNING PATTERN EXTRACTION (background)
-                        const learningPromise = proactiveLearning.extractPatternsFromEngagement({
+                        console.log('🚀 Starting background processing for session:', actualSessionId);
+                        const backgroundAnalysis = this.serviceFactory.get('backgroundAnalysis');
+                        await backgroundAnalysis.processMessageAnalysis({
                             sessionId: actualSessionId,
                             userId: userId,
-                            personalityId: characterId,
+                            characterId: characterId,
                             userMessage: message,
-                            agentResponse: fullAiResponse,
-                            outcome: 'success' // Assume success for now
-                        }).catch(error => {
-                            console.error('Background learning analysis failed:', error);
+                            aiResponse: fullAiResponse,
+                            psychologyState: psychologyState,
+                            character: character
                         });
-
-                        // Wait for all background analyses to complete
-                        await Promise.allSettled([
-                            psychologyAnalysisPromise,
-                            conversationAnalysisPromise,
-                            proactiveAnalysisPromise,
-                            learningPromise
-                        ]);
-
-                        console.log(`Background analysis completed for session ${actualSessionId}`);
-
+                        console.log('✅ Background processing completed for session:', actualSessionId);
                     } catch (error) {
-                        console.error('Background processing error:', error);
+                        console.error('❌ Background analysis failed for session:', actualSessionId, error);
                     }
                 });
 
@@ -371,6 +273,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     details: error.message
                 })}\n\n`);
                 res.end();
+                return; // Don't run background processing if there was an error
             }
         });
 
@@ -422,6 +325,89 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                 console.error('Psychology API Error:', error);
                 res.status(500).json({ 
                     error: 'Failed to get psychology state', 
+                    details: error.message 
+                });
+            }
+        });
+
+        // Server-Sent Events endpoint for proactive messages
+        this.router.get('/proactive/:sessionId', async (req, res) => {
+            try {
+                const { sessionId } = req.params;
+                
+                // Set up Server-Sent Events headers
+                res.writeHead(200, {
+                    'Content-Type': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'Access-Control-Allow-Origin': 'http://localhost:5173',
+                    'Access-Control-Allow-Headers': 'Cache-Control'
+                });
+
+                // Send initial connection confirmation
+                res.write(`data: ${JSON.stringify({
+                    type: 'connected',
+                    sessionId: sessionId,
+                    timestamp: new Date().toISOString()
+                })}\n\n`);
+
+                // Get proactive delivery service (fix: capture serviceFactory from outer scope)
+                const serviceFactory = this.serviceFactory;
+                const proactiveDelivery = serviceFactory.get('proactiveDelivery');
+                
+                if (!proactiveDelivery) {
+                    res.write(`data: ${JSON.stringify({
+                        type: 'error',
+                        error: 'Proactive delivery service not available'
+                    })}\n\n`);
+                    res.end();
+                    return;
+                }
+
+                // Register session for proactive message delivery
+                const cleanup = proactiveDelivery.registerSession(sessionId, (message) => {
+                    try {
+                        res.write(`data: ${JSON.stringify({
+                            type: 'proactive-message',
+                            message: message,
+                            timestamp: new Date().toISOString()
+                        })}\n\n`);
+                    } catch (error) {
+                        console.error('Error sending proactive message via SSE:', error);
+                    }
+                });
+
+                // Send periodic heartbeat to keep connection alive
+                const heartbeatInterval = setInterval(() => {
+                    try {
+                        res.write(`data: ${JSON.stringify({
+                            type: 'heartbeat',
+                            timestamp: new Date().toISOString()
+                        })}\n\n`);
+                    } catch (error) {
+                        console.error('Heartbeat failed, connection likely closed:', error);
+                        clearInterval(heartbeatInterval);
+                        cleanup();
+                    }
+                }, 30000); // Every 30 seconds
+
+                // Handle client disconnect
+                req.on('close', () => {
+                    console.log(`Proactive SSE connection closed for session ${sessionId}`);
+                    clearInterval(heartbeatInterval);
+                    cleanup();
+                });
+
+                req.on('error', (error) => {
+                    console.error(`Proactive SSE connection error for session ${sessionId}:`, error);
+                    clearInterval(heartbeatInterval);
+                    cleanup();
+                });
+
+            } catch (error) {
+                console.error('Proactive SSE API Error:', error);
+                res.status(500).json({ 
+                    error: 'Failed to establish proactive message stream', 
                     details: error.message 
                 });
             }

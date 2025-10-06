@@ -75,23 +75,74 @@ class LLMService extends AbstractService {
     }
 
     /**
-     * CLEAN ARCHITECTURE: Load configuration
+     * CLEAN ARCHITECTURE: Load configuration from settings service
      */
     async loadConfiguration() {
-        // Get configuration from environment or configuration service
-        this.config = {
-            endpoint: process.env.LLM_ENDPOINT || 'http://localhost:1234/v1/chat/completions',
-            model: process.env.LLM_MODEL || 'auto',
-            temperature: parseFloat(process.env.LLM_TEMPERATURE) || 0.7,
-            maxTokens: parseInt(process.env.LLM_MAX_TOKENS) || 2048,
-            timeout: parseInt(process.env.LLM_TIMEOUT) || 30000,
-            rateLimitRpm: parseInt(process.env.LLM_RATE_LIMIT_RPM) || 60
-        };
-        
-        // Update rate limit configuration
-        this.rateLimitConfig.requestsPerMinute = this.config.rateLimitRpm;
-        
-        this.logger.debug('LLM configuration loaded', 'LLM', this.config);
+        try {
+            // First try to get configuration from the configuration service
+            const configData = this.configuration.getConfiguration();
+            const llmConfig = configData?.llm || {};
+            
+            // Fallback to environment variables if no configuration service data
+            this.config = {
+                endpoint: llmConfig.endpoint || process.env.LLM_ENDPOINT || 'http://localhost:1234/v1/chat/completions',
+                model: llmConfig.model || process.env.LLM_MODEL || 'meta-llama-3.1-8b-instruct', // Default to a working model
+                temperature: llmConfig.temperature || parseFloat(process.env.LLM_TEMPERATURE) || 0.7,
+                maxTokens: llmConfig.maxTokens || parseInt(process.env.LLM_MAX_TOKENS) || 2048,
+                timeout: parseInt(process.env.LLM_TIMEOUT) || 30000,
+                rateLimitRpm: parseInt(process.env.LLM_RATE_LIMIT_RPM) || 60
+            };
+            
+            // Update rate limit configuration
+            this.rateLimitConfig.requestsPerMinute = this.config.rateLimitRpm;
+            
+            this.logger.debug('LLM configuration loaded', 'LLM', this.config);
+            
+        } catch (error) {
+            this.logger.warn('Failed to load configuration from service, using defaults', 'LLM', { error: error.message });
+            
+            // Fallback configuration if configuration service fails
+            this.config = {
+                endpoint: process.env.LLM_ENDPOINT || 'http://localhost:1234/v1/chat/completions',
+                model: process.env.LLM_MODEL || 'meta-llama-3.1-8b-instruct',
+                temperature: parseFloat(process.env.LLM_TEMPERATURE) || 0.7,
+                maxTokens: parseInt(process.env.LLM_MAX_TOKENS) || 2048,
+                timeout: parseInt(process.env.LLM_TIMEOUT) || 30000,
+                rateLimitRpm: parseInt(process.env.LLM_RATE_LIMIT_RPM) || 60
+            };
+            
+            this.rateLimitConfig.requestsPerMinute = this.config.rateLimitRpm;
+        }
+    }
+
+    /**
+     * CLEAN ARCHITECTURE: Update model configuration dynamically
+     */
+    async updateModelConfiguration(newConfig) {
+        try {
+            this.logger.info('Updating LLM model configuration', 'LLM', newConfig);
+            
+            // Update the configuration
+            this.config = {
+                ...this.config,
+                ...newConfig
+            };
+            
+            // Update rate limit if changed
+            if (newConfig.rateLimitRpm) {
+                this.rateLimitConfig.requestsPerMinute = newConfig.rateLimitRpm;
+            }
+            
+            // Test the new configuration
+            await this.testConnection();
+            
+            this.logger.info('LLM model configuration updated successfully', 'LLM', this.config);
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to update LLM model configuration', 'LLM', { error: error.message });
+            throw error;
+        }
     }
 
     /**

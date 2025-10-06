@@ -37,7 +37,7 @@ const SettingsPage: React.FC = () => {
 
   const loadSettings = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/settings/current');
+      const response = await fetch('http://localhost:3002/api/settings/current');
       const data = await response.json();
       
       if (data.success) {
@@ -53,7 +53,7 @@ const SettingsPage: React.FC = () => {
 
   const loadModels = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/settings/models');
+      const response = await fetch('http://localhost:3002/api/settings/models');
       const data = await response.json();
       
       if (data.success) {
@@ -76,7 +76,7 @@ const SettingsPage: React.FC = () => {
     setMessage(null);
     
     try {
-      const response = await fetch('http://localhost:3001/api/settings/update', {
+      const response = await fetch('http://localhost:3002/api/settings/update', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

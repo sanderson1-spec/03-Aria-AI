@@ -26,7 +26,7 @@ const CharactersPage: React.FC = () => {
 
   const loadCharacters = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/characters');
+      const response = await fetch('http://localhost:3002/api/characters');
       const data = await response.json();
       
       if (data.success) {
@@ -47,7 +47,7 @@ const CharactersPage: React.FC = () => {
     if (!confirm('Are you sure you want to delete this character?')) return;
     
     try {
-      const response = await fetch(`http://localhost:3001/api/characters/${characterId}`, {
+      const response = await fetch(`http://localhost:3002/api/characters/${characterId}`, {
         method: 'DELETE'
       });
       
@@ -259,8 +259,8 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
     
     try {
       const url = character 
-        ? `http://localhost:3001/api/characters/${character.id}`
-        : 'http://localhost:3001/api/characters';
+        ? `http://localhost:3002/api/characters/${character.id}`
+        : 'http://localhost:3002/api/characters';
       
       const method = character ? 'PUT' : 'POST';
       
