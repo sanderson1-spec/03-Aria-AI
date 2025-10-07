@@ -25,6 +25,8 @@ const ConfigurationService = require('./backend/services/foundation/CORE_Configu
 
 // Infrastructure Services
 const DataAccessLayer = require('./backend/dal/CORE_DataAccessLayer');
+const MessageDeliveryService = require('./backend/services/infrastructure/CORE_MessageDeliveryService');
+const SchedulingService = require('./backend/services/infrastructure/CORE_SchedulingService');
 
 // Intelligence Services  
 const LLMService = require('./backend/services/intelligence/CORE_LLMService');
@@ -51,6 +53,7 @@ const UserSessionRepository = require('./backend/dal/repositories/CORE_UserSessi
 const AnalyticsRepository = require('./backend/dal/repositories/CORE_AnalyticsRepository');
 const ConfigurationRepository = require('./backend/dal/repositories/CORE_ConfigurationRepository');
 const SchemaRepository = require('./backend/dal/repositories/CORE_SchemaRepository');
+const CommitmentsRepository = require('./backend/dal/repositories/CORE_CommitmentsRepository');
 
 /**
  * Database Service - Infrastructure Layer
@@ -149,6 +152,7 @@ class DatabaseService {
             { name: 'psychology', class: PsychologyRepository, table: 'psychology_frameworks' },
             // Proactive intelligence repositories
             { name: 'proactive', class: ProactiveRepository, table: 'proactive_engagements' },
+            { name: 'commitments', class: CommitmentsRepository, table: 'commitments' },
             // Configuration and analytics
             { name: 'configuration', class: ConfigurationRepository, table: 'configuration' },
             { name: 'analytics', class: AnalyticsRepository, table: 'analytics_data' },
@@ -207,6 +211,7 @@ class DatabaseService {
             sessions: this.repositories.get('sessions'),
             psychology: this.repositories.get('psychology'),
             proactive: this.repositories.get('proactive'),
+            commitments: this.repositories.get('commitments'),
             configuration: this.repositories.get('configuration'),
             analytics: this.repositories.get('analytics'),
             schema: this.repositories.get('schema'),
@@ -326,6 +331,24 @@ async function setupServices(config = {}) {
 
         // Structured Response Service - JSON processing with LLM
         serviceFactory.registerService('structuredResponse', StructuredResponseService, ['llm', 'logger', 'errorHandling']);
+
+        // ===== INFRASTRUCTURE LAYER (CONTINUED) =====
+        // Real-time communication services
+
+        // Message Delivery Service - WebSocket connection management and message delivery
+        serviceFactory.registerService('messageDelivery', MessageDeliveryService, [
+            'database',
+            'logger',
+            'errorHandling'
+        ]);
+
+        // Scheduling Service - Background polling for scheduled proactive messages
+        serviceFactory.registerService('scheduling', SchedulingService, [
+            'database',
+            'logger',
+            'errorHandling',
+            'messageDelivery'
+        ]);
 
         // ===== DOMAIN LAYER =====
         // Business logic and domain-specific services

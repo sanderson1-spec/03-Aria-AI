@@ -3,6 +3,8 @@ const cors = require('cors');
 const ChatRoutes = require('./chatRoutes');
 const SettingsRoutes = require('./settingsRoutes');
 const CharactersRoutes = require('./charactersRoutes');
+const ProactiveRoutes = require('./proactiveRoutes');
+const { setupWebSocketServer } = require('./websocket');
 
 class APIServer {
     constructor(serviceFactory, port = 3001) {
@@ -10,6 +12,7 @@ class APIServer {
         this.serviceFactory = serviceFactory;
         this.port = port;
         this.server = null;
+        this.wss = null;
         this.setupMiddleware();
         this.setupRoutes();
     }
@@ -53,6 +56,10 @@ class APIServer {
         const charactersRoutes = new CharactersRoutes(this.serviceFactory);
         this.app.use('/api/characters', charactersRoutes.getRouter());
 
+        // Proactive routes
+        const proactiveRoutes = new ProactiveRoutes(this.serviceFactory);
+        this.app.use('/api/proactive', proactiveRoutes.getRouter());
+
         // 404 handler
         this.app.use((req, res) => {
             res.status(404).json({ error: 'API endpoint not found' });
@@ -65,6 +72,15 @@ class APIServer {
                 this.server = this.app.listen(this.port, () => {
                     console.log(`🌐 API Server started on http://localhost:${this.port}`);
                     console.log(`📡 Chat API available at http://localhost:${this.port}/api/chat`);
+                    
+                    // Setup WebSocket server on the same HTTP server
+                    try {
+                        this.wss = setupWebSocketServer(this.server, this.serviceFactory);
+                        console.log(`🔌 WebSocket server initialized on ws://localhost:${this.port}`);
+                    } catch (wsError) {
+                        console.error('⚠️  Failed to initialize WebSocket server:', wsError.message);
+                    }
+                    
                     resolve(this.server);
                 });
 
@@ -87,10 +103,24 @@ class APIServer {
     async stop() {
         if (this.server) {
             return new Promise((resolve) => {
-                this.server.close(() => {
-                    console.log('🛑 API Server stopped');
-                    resolve();
-                });
+                // Close WebSocket server first
+                if (this.wss) {
+                    this.wss.close(() => {
+                        console.log('🔌 WebSocket server stopped');
+                        
+                        // Then close HTTP server
+                        this.server.close(() => {
+                            console.log('🛑 API Server stopped');
+                            resolve();
+                        });
+                    });
+                } else {
+                    // If no WebSocket server, just close HTTP server
+                    this.server.close(() => {
+                        console.log('🛑 API Server stopped');
+                        resolve();
+                    });
+                }
             });
         }
     }
