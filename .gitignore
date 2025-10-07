@@ -265,3 +265,4 @@ node_modules/function-bind/.github/SECURITY.md
 app.log
 database/aria.db
 *.db
+database/aria.db

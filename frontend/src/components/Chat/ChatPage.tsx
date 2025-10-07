@@ -41,8 +41,16 @@ const ChatPage: React.FC = () => {
     
     console.log('📨 Handling proactive message:', message);
     
+    // Normalize timestamp to Date object if it's a string
+    const normalizedMessage = {
+      ...message,
+      timestamp: typeof message.timestamp === 'string' 
+        ? new Date(message.timestamp) 
+        : message.timestamp
+    };
+    
     // Add proactive message to current chat
-    const updatedMessages = [...currentChat.messages, message];
+    const updatedMessages = [...currentChat.messages, normalizedMessage];
     const updatedChat = { ...currentChat, messages: updatedMessages };
     
     setCurrentChat(updatedChat);

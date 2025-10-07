@@ -50,31 +50,28 @@ export const CollapsibleConversationList: React.FC<CollapsibleConversationListPr
   return (
     <div className={`bg-gray-50 border border-gray-200 rounded-lg ${className}`}>
       {/* Header */}
-      <button
-        onClick={toggleExpanded}
-        className="w-full p-4 flex items-center justify-between hover:bg-gray-100 transition-colors rounded-t-lg"
-      >
-        <div className="flex items-center justify-between w-full">
+      <div className="w-full p-4 flex items-center justify-between hover:bg-gray-100 transition-colors rounded-t-lg">
+        <button
+          onClick={toggleExpanded}
+          className="flex-1 flex items-center justify-between cursor-pointer"
+        >
           <h2 className="font-semibold text-gray-800">Conversations</h2>
           <div className="flex items-center space-x-1">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onCreateNewChat();
-              }}
-              className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-              title="New Chat"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
             {isExpanded ? (
               <ChevronUp className="w-5 h-5 text-gray-500" />
             ) : (
               <ChevronDown className="w-5 h-5 text-gray-500" />
             )}
           </div>
-        </div>
-      </button>
+        </button>
+        <button
+          onClick={onCreateNewChat}
+          className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors ml-1"
+          title="New Chat"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
+      </div>
 
       {/* Content */}
       {isExpanded && (
