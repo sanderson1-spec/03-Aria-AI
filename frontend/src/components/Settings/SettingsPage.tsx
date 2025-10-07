@@ -8,7 +8,6 @@ interface Model {
 
 interface LLMSettings {
   model: string;
-  endpoint: string;
   temperature: number;
   maxTokens: number;
 }
@@ -48,7 +47,6 @@ const SettingsPage: React.FC = () => {
         setSettings({
           llm: {
             model: userConfig.conversational?.model || globalConfig.conversational?.model || 'meta-llama-3.1-8b-instruct',
-            endpoint: process.env.LLM_ENDPOINT || 'http://192.168.178.182:1234/v1/chat/completions',
             temperature: userConfig.conversational?.temperature || globalConfig.conversational?.temperature || 0.7,
             maxTokens: userConfig.conversational?.max_tokens || globalConfig.conversational?.max_tokens || 2048
           },
@@ -212,23 +210,6 @@ const SettingsPage: React.FC = () => {
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
                     Available models from LM Studio
-                  </p>
-                </div>
-
-                {/* Endpoint */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Endpoint
-                  </label>
-                  <input
-                    type="text"
-                    value={settings.llm.endpoint}
-                    onChange={(e) => updateLLMSetting('endpoint', e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="http://localhost:1234/v1/chat/completions"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    LM Studio API endpoint
                   </p>
                 </div>
 
