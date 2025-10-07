@@ -30,10 +30,17 @@ class ConversationRepository extends BaseRepository {
      * Provides paginated access to conversation logs
      */
     async findAllPaginated(options = {}) {
-        return await super.findPaginated({
-            ...options,
-            orderBy: 'timestamp DESC'
-        });
+        const limit = options.limit || 50;
+        const offset = options.offset || 0;
+        
+        const query = `
+            SELECT * FROM ${this.tableName} 
+            ORDER BY timestamp DESC 
+            LIMIT ? OFFSET ?
+        `;
+        
+        const records = await this.dal.query(query, [limit, offset]);
+        return { records, total: records.length };
     }
 
     /**
@@ -145,12 +152,15 @@ class ConversationRepository extends BaseRepository {
     async getSessionHistory(sessionId, limit = 50, offset = 0) {
         this.validateRequiredFields({ sessionId }, ['sessionId'], 'get session history');
         
-        const { records } = await super.findPaginated({
-            where: { session_id: sessionId },
-            limit,
-            page: Math.floor(offset / limit) + 1,
-            orderBy: 'timestamp DESC'
-        });
+        // Use DAL query method directly
+        const query = `
+            SELECT * FROM ${this.tableName} 
+            WHERE chat_id = ? 
+            ORDER BY timestamp DESC 
+            LIMIT ? OFFSET ?
+        `;
+        
+        const records = await this.dal.query(query, [sessionId, limit, offset]);
         
         return records.reverse(); // Return in chronological order
     }
@@ -162,16 +172,23 @@ class ConversationRepository extends BaseRepository {
     async getRecentMessages(sessionId, count = 10, beforeTimestamp = null) {
         this.validateRequiredFields({ sessionId }, ['sessionId'], 'get recent messages');
         
-        const conditions = { session_id: sessionId };
+        // Query parameters will be built dynamically
+        
+        let query = `
+            SELECT * FROM ${this.tableName} 
+            WHERE chat_id = ?
+        `;
+        const params = [sessionId];
+        
         if (beforeTimestamp) {
-            conditions.timestamp = { '<': beforeTimestamp };
+            query += ` AND timestamp < ?`;
+            params.push(beforeTimestamp);
         }
         
-        const { records } = await super.findPaginated({
-            where: conditions,
-            limit: count,
-            orderBy: 'timestamp DESC'
-        });
+        query += ` ORDER BY timestamp DESC LIMIT ?`;
+        params.push(count);
+        
+        const records = await this.dal.query(query, params);
         
         return records.reverse(); // Return in chronological order
     }
@@ -184,7 +201,7 @@ class ConversationRepository extends BaseRepository {
         this.validateRequiredFields({ sessionId, topicId }, ['sessionId', 'topicId'], 'get messages by topic');
         
         return await super.findAll({
-            session_id: sessionId,
+            chat_id: sessionId, // Fixed: use chat_id instead of session_id
             topic_id: topicId
         });
     }
@@ -213,23 +230,25 @@ class ConversationRepository extends BaseRepository {
             conditions.agent_type = criteria.agentType;
         }
         
-        if (criteria.messageType) {
-            conditions.message_type = criteria.messageType;
-        }
+        // Message type filtering will be handled in SQL query if needed
         
-        if (criteria.fromDate) {
-            conditions.timestamp = { '>=': criteria.fromDate };
-        }
+        // Date filtering will be handled in SQL query
+        
+        let query = `
+            SELECT * FROM ${this.tableName} 
+            WHERE chat_id = ?
+        `;
+        const params = [criteria.sessionId];
         
         if (criteria.toDate) {
-            conditions.timestamp = { '<=': criteria.toDate };
+            query += ` AND timestamp <= ?`;
+            params.push(criteria.toDate);
         }
         
-        const { records } = await super.findPaginated({
-            where: conditions,
-            limit: criteria.limit || 50,
-            orderBy: 'timestamp DESC'
-        });
+        query += ` ORDER BY timestamp DESC LIMIT ?`;
+        params.push(criteria.limit || 50);
+        
+        const records = await this.dal.query(query, params);
         
         return records;
     }

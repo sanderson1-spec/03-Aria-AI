@@ -43,7 +43,7 @@ export const CollapsiblePsychologySection: React.FC<CollapsiblePsychologySection
     
     setIsLoading(true);
     try {
-      const response = await fetch(`http://localhost:3001/api/chat/psychology/${sessionId}`);
+      const response = await fetch(`http://localhost:3002/api/chat/psychology/${sessionId}`);
       const data = await response.json();
       
       if (data.success) {

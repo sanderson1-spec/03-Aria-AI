@@ -439,6 +439,7 @@ class PsychologyRepository extends BaseRepository {
             relationship_relevance: weightData.relationship_relevance || 5,
             personal_significance: weightData.personal_significance || 5,
             contextual_importance: weightData.contextual_importance || 5,
+            accessibility_score: weightData.accessibility_score || 1.0,
             memory_type: weightData.memory_type || 'conversational',
             memory_tags: JSON.stringify(weightData.memory_tags || []),
             recall_frequency: weightData.recall_frequency || 0,
@@ -450,9 +451,9 @@ class PsychologyRepository extends BaseRepository {
         const sql = `
             INSERT OR REPLACE INTO character_memory_weights (
                 id, session_id, message_id, emotional_impact_score, relationship_relevance,
-                personal_significance, contextual_importance, memory_type, memory_tags,
+                personal_significance, contextual_importance, accessibility_score, memory_type, memory_tags,
                 recall_frequency, last_recalled, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const result = await this.dal.query(sql, [
@@ -463,6 +464,7 @@ class PsychologyRepository extends BaseRepository {
             memoryWeight.relationship_relevance,
             memoryWeight.personal_significance,
             memoryWeight.contextual_importance,
+            memoryWeight.accessibility_score,
             memoryWeight.memory_type,
             memoryWeight.memory_tags,
             memoryWeight.recall_frequency,
@@ -487,6 +489,7 @@ class PsychologyRepository extends BaseRepository {
         const sql = `
             SELECT 
                 cmw.*,
+                cmw.accessibility_score,
                 cl.message,
                 cl.sender,
                 cl.timestamp,
@@ -533,6 +536,31 @@ class PsychologyRepository extends BaseRepository {
 
         return await this.dal.query(sql, [
             this.getCurrentTimestamp(),
+            this.getCurrentTimestamp(),
+            sessionId,
+            messageId
+        ]);
+    }
+
+    /**
+     * DOMAIN LAYER: Update memory accessibility score
+     */
+    async updateMemoryAccessibility(sessionId, messageId, newScore) {
+        this.validateRequiredFields(
+            { sessionId, messageId, newScore },
+            ['sessionId', 'messageId', 'newScore'],
+            'update memory accessibility'
+        );
+
+        const sql = `
+            UPDATE character_memory_weights 
+            SET accessibility_score = ?,
+                updated_at = ?
+            WHERE session_id = ? AND message_id = ?
+        `;
+
+        return await this.dal.query(sql, [
+            newScore,
             this.getCurrentTimestamp(),
             sessionId,
             messageId

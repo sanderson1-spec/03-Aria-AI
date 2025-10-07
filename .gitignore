@@ -258,3 +258,10 @@ backend/utils/.DS_Store
 /.cursor
 .bypass-core
 *.db
+node_modules/fsevents/LICENSE
+node_modules/function-bind/.github/FUNDING.yml
+node_modules/function-bind/.github/SECURITY.md
+/node_modules
+app.log
+database/aria.db
+*.db

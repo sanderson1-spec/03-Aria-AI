@@ -418,7 +418,8 @@ class PersonalityRepository extends BaseRepository {
         try {
             this.validateRequiredFields({ characterId }, ['characterId'], 'delete character');
 
-            const result = await this.update({ is_active: 0 }, { id: characterId });
+            // Soft delete: set is_active to 0
+            const result = await this.update(characterId, { is_active: 0 });
             
             return { deleted: result.changes > 0 };
         } catch (error) {

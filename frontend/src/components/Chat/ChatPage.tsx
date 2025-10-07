@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CollapsiblePsychologySection } from './CollapsiblePsychologySection';
 import { useChatContext } from '../../contexts/ChatContext';
+import { useProactiveMessages } from '../../hooks/useProactiveMessages';
 import type { Message } from '../../types';
 
 const ChatPage: React.FC = () => {
@@ -33,6 +34,29 @@ const ChatPage: React.FC = () => {
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
     }
   }, [inputValue]);
+
+  // Handle proactive messages
+  const handleProactiveMessage = useCallback((message: Message) => {
+    if (!currentChat) return;
+    
+    console.log('📨 Handling proactive message:', message);
+    
+    // Add proactive message to current chat
+    const updatedMessages = [...currentChat.messages, message];
+    const updatedChat = { ...currentChat, messages: updatedMessages };
+    
+    setCurrentChat(updatedChat);
+    setChats(prev => prev.map(chat => 
+      chat.id === currentChat.id ? updatedChat : chat
+    ));
+  }, [currentChat, setCurrentChat, setChats]);
+
+  // Setup proactive messaging connection
+  const { isConnected: isProactiveConnected } = useProactiveMessages({
+    sessionId: currentChat?.id || null,
+    onProactiveMessage: handleProactiveMessage,
+    enabled: !!currentChat
+  });
 
   // Load characters when modal opens
   useEffect(() => {
@@ -81,7 +105,7 @@ const ChatPage: React.FC = () => {
     
     try {
       // Use fetch with streaming handling
-      const response = await fetch('http://localhost:3001/api/chat/stream', {
+      const response = await fetch('http://localhost:3002/api/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -227,9 +251,23 @@ const ChatPage: React.FC = () => {
             </div>
           </div>
         )}
-        <div className="flex items-center space-x-2 text-green-600">
-          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-          <span className="text-sm font-medium">Connected</span>
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 text-green-600">
+            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span className="text-sm font-medium">Connected</span>
+          </div>
+          {currentChat && (
+            <div className={`flex items-center space-x-2 ${
+              isProactiveConnected ? 'text-blue-600' : 'text-gray-400'
+            }`}>
+              <div className={`w-2 h-2 rounded-full ${
+                isProactiveConnected ? 'bg-blue-500' : 'bg-gray-300'
+              }`}></div>
+              <span className="text-sm font-medium">
+                {isProactiveConnected ? 'Proactive' : 'Proactive Off'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

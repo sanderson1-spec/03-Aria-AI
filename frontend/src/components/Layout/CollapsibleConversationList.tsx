@@ -14,8 +14,8 @@ interface CollapsibleConversationListProps {
   chats: Chat[];
   currentChat: Chat | null;
   onSwitchToChat: (characterId: string) => void;
+  onDeleteChat: (chatId: string) => void;
   onCreateNewChat: () => void;
-  onClearAllChats: () => void;
   className?: string;
 }
 
@@ -23,8 +23,8 @@ export const CollapsibleConversationList: React.FC<CollapsibleConversationListPr
   chats,
   currentChat,
   onSwitchToChat,
+  onDeleteChat,
   onCreateNewChat,
-  onClearAllChats,
   className = '',
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -57,18 +57,6 @@ export const CollapsibleConversationList: React.FC<CollapsibleConversationListPr
         <div className="flex items-center justify-between w-full">
           <h2 className="font-semibold text-gray-800">Conversations</h2>
           <div className="flex items-center space-x-1">
-            {chats.length > 0 && isExpanded && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClearAllChats();
-                }}
-                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                title="Clear All Chats"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -121,44 +109,62 @@ export const CollapsibleConversationList: React.FC<CollapsibleConversationListPr
             ) : (
               <div className="p-2">
                 {chats.map((chat) => (
-                  <button
+                  <div
                     key={chat.id}
-                    onClick={() => onSwitchToChat(chat.characterId)}
-                    className={`w-full p-3 rounded-lg text-left hover:bg-white transition-colors mb-1 ${
+                    className={`relative group rounded-lg mb-1 ${
                       currentChat?.id === chat.id 
                         ? 'bg-white border border-blue-200 shadow-sm' 
-                        : 'hover:shadow-sm'
+                        : 'hover:bg-white hover:shadow-sm'
                     }`}
                   >
-                    <div className="flex items-center space-x-3">
-                      <img
-                        src={`/avatars/${chat.characterAvatar}`}
-                        alt={chat.characterName}
-                        className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.characterName)}&background=random`;
-                        }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h3 className={`font-medium truncate ${
-                            currentChat?.id === chat.id ? 'text-blue-600' : 'text-gray-800'
-                          }`}>
-                            {chat.characterName}
-                          </h3>
-                          <span className="text-xs text-gray-500 flex-shrink-0">
-                            {chat.messages.length > 1 ? `${chat.messages.length - 1} msg${chat.messages.length > 2 ? 's' : ''}` : 'New'}
-                          </span>
+                    <button
+                      onClick={() => onSwitchToChat(chat.characterId)}
+                      className="w-full p-3 text-left transition-colors"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <img
+                          src={`/avatars/${chat.characterAvatar}`}
+                          alt={chat.characterName}
+                          className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.characterName)}&background=random`;
+                          }}
+                        />
+                        <div className="flex-1 min-w-0 pr-8">
+                          <div className="flex items-center justify-between">
+                            <h3 className={`font-medium truncate ${
+                              currentChat?.id === chat.id ? 'text-blue-600' : 'text-gray-800'
+                            }`}>
+                              {chat.characterName}
+                            </h3>
+                            <span className="text-xs text-gray-500 flex-shrink-0">
+                              {chat.messages.length > 1 ? `${chat.messages.length - 1} msg${chat.messages.length > 2 ? 's' : ''}` : 'New'}
+                            </span>
+                          </div>
+                          {chat.messages.length > 1 && (
+                            <p className="text-sm text-gray-500 truncate mt-1">
+                              {chat.messages[chat.messages.length - 1].type === 'user' ? 'You: ' : `${chat.characterName}: `}
+                              {chat.messages[chat.messages.length - 1].content}
+                            </p>
+                          )}
                         </div>
-                        {chat.messages.length > 1 && (
-                          <p className="text-sm text-gray-500 truncate mt-1">
-                            {chat.messages[chat.messages.length - 1].type === 'user' ? 'You: ' : `${chat.characterName}: `}
-                            {chat.messages[chat.messages.length - 1].content}
-                          </p>
-                        )}
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    
+                    {/* Individual Delete Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete conversation with ${chat.characterName}?`)) {
+                          onDeleteChat(chat.id);
+                        }
+                      }}
+                      className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all border border-transparent hover:border-red-300"
+                      title={`Delete this conversation with ${chat.characterName}`}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}

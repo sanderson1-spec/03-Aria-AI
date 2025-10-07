@@ -120,6 +120,21 @@ class ProactiveIntelligenceService extends AbstractService {
                 finalTiming: decision.engagement_timing
             });
             
+            // Detect commitments in the conversation
+            this.logger.info('Running commitment detection', 'ProactiveIntelligence');
+            const commitmentDetection = await this.detectCommitment(analysisContext);
+            
+            if (commitmentDetection.has_commitment) {
+                this.logger.info('Commitment detected', 'ProactiveIntelligence', {
+                    commitmentType: commitmentDetection.commitment?.commitment_type,
+                    confidence: commitmentDetection.confidence
+                });
+                decision.commitment_detected = commitmentDetection;
+            } else {
+                this.logger.debug('No commitment detected', 'ProactiveIntelligence');
+                decision.commitment_detected = null;
+            }
+            
             return decision;
             
         } catch (error) {
@@ -143,6 +158,7 @@ class ProactiveIntelligenceService extends AbstractService {
                 'should_engage_proactively',
                 'engagement_timing', 
                 'psychological_reasoning',
+                'proactive_message_content',
                 'confidence_score'
             ],
             properties: {
@@ -281,7 +297,17 @@ TIMING OPTIONS (choose what feels most natural for YOUR character):
 
 If you naturally want to reach out, what would YOU authentically say based on your unique personality and current state?
 
+**IMPORTANT: If you decide to engage proactively (should_engage_proactively = true), you MUST provide the exact message content in the proactive_message_content field. This is the actual message that will be sent to the user.**
+
 Consider the current time and date context when making your decision - does the time of day, day of week, or any time-related factors influence your natural impulses to engage?
+
+**REQUIRED JSON FIELDS:**
+- should_engage_proactively: true/false
+- engagement_timing: one of the timing options above
+- psychological_reasoning: detailed explanation of your decision
+- proactive_message_content: the exact message to send (or null if not engaging)
+- confidence_score: 0.0 to 1.0
+- context_analysis: object with emotional_state_influence, relationship_factor, conversation_flow_assessment, learned_pattern_application
 
 Respond with complete JSON. Let your individual character psychology and authentic impulses guide every decision.`;
     }
@@ -438,10 +464,24 @@ IMPORTANT: Interpret these states through the lens of YOUR unique personality fr
         // Validate boolean fields
         decision.should_engage_proactively = Boolean(rawDecision.should_engage_proactively);
         
-        // Validate timing enum
+        // Validate timing enum - support natural language responses
         const validTimings = ['immediate', 'wait_30_seconds', 'wait_2_minutes', 'wait_5_minutes', 'wait_later', 'none'];
-        decision.engagement_timing = validTimings.includes(rawDecision.engagement_timing) 
-            ? rawDecision.engagement_timing 
+        const naturalLanguageTimings = {
+            'later today': 'wait_later',
+            'in a few hours': 'wait_later', 
+            'tomorrow': 'wait_later',
+            'soon': 'wait_5_minutes',
+            'in a bit': 'wait_5_minutes',
+            'later': 'wait_later'
+        };
+        
+        let timing = rawDecision.engagement_timing;
+        if (naturalLanguageTimings[timing]) {
+            timing = naturalLanguageTimings[timing];
+        }
+        
+        decision.engagement_timing = validTimings.includes(timing) 
+            ? timing 
             : 'none';
         
         // Validate text fields
@@ -463,6 +503,11 @@ IMPORTANT: Interpret these states through the lens of YOUR unique personality fr
         // Safety checks
         if (decision.should_engage_proactively && decision.engagement_timing === 'none') {
             decision.engagement_timing = 'immediate';
+        }
+
+        // Ensure proactive message content is present when engaging
+        if (decision.should_engage_proactively && (!decision.proactive_message_content || decision.proactive_message_content.trim() === '')) {
+            decision.proactive_message_content = 'I wanted to check in with you. How are you doing?';
         }
 
         if (!decision.should_engage_proactively) {
@@ -487,6 +532,201 @@ IMPORTANT: Interpret these states through the lens of YOUR unique personality fr
         };
         
         return timingMap[timing] ?? null;
+    }
+
+    /**
+     * DOMAIN LAYER: Detect if character assigned a commitment to the user
+     * Uses LLM2 to analyze conversation for tasks, assignments, homework, promises
+     */
+    async detectCommitment(context) {
+        this.logger.info('Analyzing conversation for commitments', 'ProactiveIntelligence', {
+            characterName: context.personality?.name
+        });
+        
+        try {
+            // Build commitment detection prompt
+            const prompt = this.buildCommitmentDetectionPrompt(context);
+            
+            // Get commitment schema
+            const commitmentSchema = this.getCommitmentDetectionSchema();
+            
+            // Call LLM2 via structured response
+            this.logger.debug('Calling LLM for commitment detection', 'ProactiveIntelligence');
+            const rawCommitment = await this.structuredResponse.generateStructuredResponse(
+                prompt, 
+                commitmentSchema, 
+                {
+                    temperature: 0.3, // Lower temperature for more precise detection
+                    maxTokens: 800,
+                    timeout: this.config.analysisTimeout
+                }
+            );
+            
+            this.logger.info('Commitment detection completed', 'ProactiveIntelligence', {
+                hasCommitment: rawCommitment?.has_commitment,
+                confidence: rawCommitment?.confidence
+            });
+            
+            // Validate and return
+            return this.validateCommitmentDetection(rawCommitment);
+            
+        } catch (error) {
+            this.logger.error('Commitment detection failed', 'ProactiveIntelligence', {
+                error: error.message
+            });
+            return { has_commitment: false };
+        }
+    }
+
+    /**
+     * DOMAIN LAYER: Build prompt for commitment detection
+     * Very explicit about what counts as a commitment
+     */
+    buildCommitmentDetectionPrompt({
+        userMessage,
+        agentResponse,
+        conversationHistory,
+        sessionContext
+    }) {
+        const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
+        
+        return `You are analyzing a conversation to detect if ${sessionContext.personalityName || 'the character'} assigned a commitment to the user.
+
+${dateTimeContext}
+
+RECENT CONVERSATION:
+${this.formatConversationHistory(conversationHistory)}
+
+MOST RECENT EXCHANGE:
+User: "${userMessage}"
+Character: "${agentResponse}"
+
+WHAT COUNTS AS A COMMITMENT (be VERY sensitive - flag even hints):
+
+1. **Explicit Assignments:**
+   - "Do this exercise", "Try this technique", "Practice this"
+   - "I want you to...", "Can you please...", "Would you..."
+   - "Your homework is...", "Your task is..."
+
+2. **Challenges & Promises:**
+   - "I challenge you to...", "See if you can..."
+   - "Promise me you'll...", "Make sure you..."
+   - "I'll check back to see if..."
+
+3. **Follow-up Commitments:**
+   - "Let me know how it goes", "Tell me what happens"
+   - "I want to hear about...", "Report back..."
+   - "We'll discuss this next time"
+   - "I'll ask you about this later"
+
+4. **Soft Commitments:**
+   - "Think about...", "Reflect on...", "Consider..."
+   - "Keep an eye on...", "Pay attention to..."
+   - "Remember to...", "Don't forget..."
+
+5. **Time-bound Requests:**
+   - Any request with a deadline or timeframe
+   - "By tomorrow", "Within the week", "Next time we talk"
+
+DETECTION RULES:
+- Be HIGHLY SENSITIVE - if there's even a hint of assignment, flag it
+- Even gentle suggestions can be commitments if character expects follow-up
+- "Let me know" = commitment (user should report back)
+- Any form of homework, task, or action item = commitment
+- If character will check back or ask about it = commitment
+
+IMPORTANT:
+- commitment_type: Use the EXACT framing the character used (their words)
+- description: What specifically was assigned
+- character_notes: How the character wants to follow up (from their perspective)
+- due_at: Extract any mentioned time/date, convert to ISO format, or null
+- verification_needed: true if character expects proof or detailed report
+
+Analyze ONLY the character's most recent response for commitments they assigned.
+
+Respond with complete JSON following the schema.`;
+    }
+
+    /**
+     * DOMAIN LAYER: Define schema for commitment detection
+     */
+    getCommitmentDetectionSchema() {
+        return {
+            type: 'object',
+            required: ['has_commitment', 'confidence'],
+            properties: {
+                has_commitment: {
+                    type: 'boolean',
+                    description: 'True if character assigned ANY form of commitment'
+                },
+                confidence: {
+                    type: 'number',
+                    minimum: 0.0,
+                    maximum: 1.0,
+                    description: 'Confidence in commitment detection (0.0 to 1.0)'
+                },
+                commitment: {
+                    type: ['object', 'null'],
+                    properties: {
+                        commitment_type: {
+                            type: 'string',
+                            description: "Character's exact framing (e.g., 'homework', 'challenge', 'task', 'promise')"
+                        },
+                        description: {
+                            type: 'string',
+                            description: 'What was assigned - be specific and complete'
+                        },
+                        character_notes: {
+                            type: 'string',
+                            description: "How character wants to follow up (from their perspective)"
+                        },
+                        due_at: {
+                            type: ['string', 'null'],
+                            description: 'ISO timestamp for deadline, or null if not specified'
+                        },
+                        verification_needed: {
+                            type: 'boolean',
+                            description: 'True if character expects proof or detailed report back'
+                        }
+                    },
+                    required: ['commitment_type', 'description', 'character_notes', 'verification_needed']
+                }
+            },
+            fallback: {
+                has_commitment: false,
+                confidence: 0.0,
+                commitment: null
+            }
+        };
+    }
+
+    /**
+     * DOMAIN LAYER: Validate commitment detection response
+     */
+    validateCommitmentDetection(rawCommitment) {
+        if (!rawCommitment || typeof rawCommitment !== 'object') {
+            return { has_commitment: false };
+        }
+
+        const result = {
+            has_commitment: Boolean(rawCommitment.has_commitment),
+            confidence: typeof rawCommitment.confidence === 'number' 
+                ? Math.max(0.0, Math.min(1.0, rawCommitment.confidence))
+                : 0.0
+        };
+
+        if (result.has_commitment && rawCommitment.commitment) {
+            const commitment = rawCommitment.commitment;
+            result.commitment = {
+                commitment_type: commitment.commitment_type || 'unspecified',
+                description: commitment.description || '',
+                character_notes: commitment.character_notes || '',
+                due_at: commitment.due_at || null,
+                verification_needed: Boolean(commitment.verification_needed)
+            };
+        }
+
+        return result;
     }
 
     /**

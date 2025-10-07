@@ -90,24 +90,33 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     { user_id: userId, message_type: 'text' }
                 );
 
-                // Update psychology state based on interaction
-                const updatedPsychology = await psychologyService.updateCharacterState(
-                    actualSessionId, 
-                    { 
-                        lastInteraction: message,
-                        responseGenerated: aiResponse.content || aiResponse 
-                    }
-                );
-
-                // Return response
+                // Return response IMMEDIATELY (user sees response fast)
                 res.json({
                     success: true,
                     data: {
                         sessionId: actualSessionId,
                         aiResponse: aiResponse.content || aiResponse,
-                        psychologyState: updatedPsychology,
+                        psychologyState: psychologyState, // Send current state immediately
                         userMessageId,
                         aiMessageId
+                    }
+                });
+
+                // 🎯 CLEAN BACKGROUND PROCESSING - Single service call (non-streaming version)
+                setImmediate(async () => {
+                    try {
+                        const backgroundAnalysis = this.serviceFactory.get('backgroundAnalysis');
+                        await backgroundAnalysis.processMessageAnalysis({
+                            sessionId: actualSessionId,
+                            userId: userId,
+                            characterId: characterId,
+                            userMessage: message,
+                            aiResponse: aiResponse.content || aiResponse,
+                            psychologyState: psychologyState,
+                            character: character
+                        });
+                    } catch (error) {
+                        console.error('Background analysis failed:', error);
                     }
                 });
 
@@ -120,7 +129,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
             }
         });
 
-        // Send a chat message with streaming
+        // Send a chat message with streaming (OPTIMIZED FOR FAST USER RESPONSE)
         this.router.post('/stream', async (req, res) => {
             try {
                 const { message, sessionId, userId = 'default-user', characterId = 'aria' } = req.body;
@@ -141,11 +150,15 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                 // Get services
                 const llmService = this.serviceFactory.get('llm');
                 const psychologyService = this.serviceFactory.get('psychology');
+                const conversationService = this.serviceFactory.get('conversationAnalyzer');
+                const proactiveIntelligence = this.serviceFactory.get('proactiveIntelligence');
+                const proactiveLearning = this.serviceFactory.get('proactiveLearning');
                 const databaseService = this.serviceFactory.get('database');
 
                 // Create or get session
                 const actualSessionId = sessionId || uuidv4();
 
+                // FAST OPERATIONS: Do these immediately
                 // Save user message to database
                 const userMessageId = await databaseService.getDAL().conversations.saveMessage(
                     actualSessionId, 
@@ -162,7 +175,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     userMessageId
                 })}\n\n`);
 
-                // Get character information
+                // Get character information (fast database lookup)
                 const character = await databaseService.getDAL().personalities.getCharacter(characterId);
                 if (!character) {
                     res.write(`data: ${JSON.stringify({
@@ -174,10 +187,10 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     return;
                 }
 
-                // Get current psychology state
+                // Get current psychology state (fast database lookup)
                 let psychologyState = await psychologyService.getCharacterState(actualSessionId);
                 if (!psychologyState) {
-                    // Initialize psychology state for new session
+                    // Initialize psychology state for new session (fast)
                     psychologyState = await psychologyService.initializeCharacterState(userId, characterId);
                 }
 
@@ -194,7 +207,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
 
                 let fullAiResponse = '';
 
-                // Generate streaming AI response
+                // Generate streaming AI response (USER SEES THIS IMMEDIATELY)
                 const fullPrompt = `${systemPrompt}\n\nUser: ${message}\n${character.name}:`;
                 
                 await llmService.generateStreamingResponse(
@@ -212,7 +225,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     }
                 );
 
-                // Save AI response to database
+                // Save AI response to database (fast)
                 const aiMessageId = await databaseService.getDAL().conversations.saveMessage(
                     actualSessionId,
                     'assistant', 
@@ -221,24 +234,36 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     { user_id: userId, message_type: 'text' }
                 );
 
-                // Update psychology state based on interaction
-                const updatedPsychology = await psychologyService.updateCharacterState(
-                    actualSessionId, 
-                    { 
-                        lastInteraction: message,
-                        responseGenerated: fullAiResponse 
-                    }
-                );
-
-                // Send completion message
+                // Send completion message IMMEDIATELY (user sees response is complete)
                 res.write(`data: ${JSON.stringify({
                     type: 'complete',
                     aiMessageId,
-                    psychologyState: updatedPsychology,
+                    psychologyState: psychologyState, // Send current state immediately
                     fullResponse: fullAiResponse
                 })}\n\n`);
 
                 res.end();
+
+                // 🎯 CLEAN BACKGROUND PROCESSING - Single service call
+                // This runs asynchronously without blocking the user experience
+                setImmediate(async () => {
+                    try {
+                        console.log('🚀 Starting background processing for session:', actualSessionId);
+                        const backgroundAnalysis = this.serviceFactory.get('backgroundAnalysis');
+                        await backgroundAnalysis.processMessageAnalysis({
+                            sessionId: actualSessionId,
+                            userId: userId,
+                            characterId: characterId,
+                            userMessage: message,
+                            aiResponse: fullAiResponse,
+                            psychologyState: psychologyState,
+                            character: character
+                        });
+                        console.log('✅ Background processing completed for session:', actualSessionId);
+                    } catch (error) {
+                        console.error('❌ Background analysis failed for session:', actualSessionId, error);
+                    }
+                });
 
             } catch (error) {
                 console.error('Chat Streaming API Error:', error);
@@ -248,6 +273,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     details: error.message
                 })}\n\n`);
                 res.end();
+                return; // Don't run background processing if there was an error
             }
         });
 
@@ -299,6 +325,89 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                 console.error('Psychology API Error:', error);
                 res.status(500).json({ 
                     error: 'Failed to get psychology state', 
+                    details: error.message 
+                });
+            }
+        });
+
+        // Server-Sent Events endpoint for proactive messages
+        this.router.get('/proactive/:sessionId', async (req, res) => {
+            try {
+                const { sessionId } = req.params;
+                
+                // Set up Server-Sent Events headers
+                res.writeHead(200, {
+                    'Content-Type': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'Access-Control-Allow-Origin': 'http://localhost:5173',
+                    'Access-Control-Allow-Headers': 'Cache-Control'
+                });
+
+                // Send initial connection confirmation
+                res.write(`data: ${JSON.stringify({
+                    type: 'connected',
+                    sessionId: sessionId,
+                    timestamp: new Date().toISOString()
+                })}\n\n`);
+
+                // Get proactive delivery service (fix: capture serviceFactory from outer scope)
+                const serviceFactory = this.serviceFactory;
+                const proactiveDelivery = serviceFactory.get('proactiveDelivery');
+                
+                if (!proactiveDelivery) {
+                    res.write(`data: ${JSON.stringify({
+                        type: 'error',
+                        error: 'Proactive delivery service not available'
+                    })}\n\n`);
+                    res.end();
+                    return;
+                }
+
+                // Register session for proactive message delivery
+                const cleanup = proactiveDelivery.registerSession(sessionId, (message) => {
+                    try {
+                        res.write(`data: ${JSON.stringify({
+                            type: 'proactive-message',
+                            message: message,
+                            timestamp: new Date().toISOString()
+                        })}\n\n`);
+                    } catch (error) {
+                        console.error('Error sending proactive message via SSE:', error);
+                    }
+                });
+
+                // Send periodic heartbeat to keep connection alive
+                const heartbeatInterval = setInterval(() => {
+                    try {
+                        res.write(`data: ${JSON.stringify({
+                            type: 'heartbeat',
+                            timestamp: new Date().toISOString()
+                        })}\n\n`);
+                    } catch (error) {
+                        console.error('Heartbeat failed, connection likely closed:', error);
+                        clearInterval(heartbeatInterval);
+                        cleanup();
+                    }
+                }, 30000); // Every 30 seconds
+
+                // Handle client disconnect
+                req.on('close', () => {
+                    console.log(`Proactive SSE connection closed for session ${sessionId}`);
+                    clearInterval(heartbeatInterval);
+                    cleanup();
+                });
+
+                req.on('error', (error) => {
+                    console.error(`Proactive SSE connection error for session ${sessionId}:`, error);
+                    clearInterval(heartbeatInterval);
+                    cleanup();
+                });
+
+            } catch (error) {
+                console.error('Proactive SSE API Error:', error);
+                res.status(500).json({ 
+                    error: 'Failed to establish proactive message stream', 
                     details: error.message 
                 });
             }
