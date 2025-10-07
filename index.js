@@ -25,6 +25,44 @@ let globalFrontendProcess = null;
 let globalApiServer = null;
 
 /**
+ * Kill any existing Aria processes to ensure clean startup
+ */
+async function killExistingProcesses() {
+    const { execSync } = require('child_process');
+    
+    try {
+        console.log('🧹 Cleaning up existing processes...');
+        
+        // Find and kill any running node processes related to Aria
+        const commands = [
+            // Kill any node processes running index.js or start.js
+            'pkill -9 -f "node.*index\\.js" 2>/dev/null || true',
+            'pkill -9 -f "node.*start\\.js" 2>/dev/null || true',
+            // Kill any vite processes
+            'pkill -9 -f "node.*vite" 2>/dev/null || true',
+            // Kill any processes on our ports
+            'lsof -ti:3001,3002,3003,5173,5174,5175 2>/dev/null | xargs kill -9 2>/dev/null || true'
+        ];
+        
+        for (const cmd of commands) {
+            try {
+                execSync(cmd, { stdio: 'ignore' });
+            } catch (error) {
+                // Ignore errors - process might not exist
+            }
+        }
+        
+        // Wait a moment for processes to fully terminate
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        console.log('✅ Cleanup complete');
+    } catch (error) {
+        console.log('⚠️  Cleanup warning:', error.message);
+        // Continue anyway - not critical if cleanup fails
+    }
+}
+
+/**
  * Start frontend server (works in both dev and production modes)
  */
 async function startFrontendServer(isDevelopment = true) {
@@ -211,6 +249,9 @@ function setupGracefulShutdown() {
  */
 async function runCompleteApplication() {
     console.log('🎮 Starting Complete Aria AI Application from IDE...');
+    
+    // Step 0: Kill any existing processes first
+    await killExistingProcesses();
     
     // Determine mode based on environment or default to development
     const isDevelopment = process.env.NODE_ENV !== 'production';

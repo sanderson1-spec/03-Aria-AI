@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Message } from '../types';
 
 interface ProactiveMessageEvent {
@@ -71,7 +71,7 @@ export const useProactiveMessages = ({
 
     try {
       const eventSource = new EventSource(
-        `http://localhost:3002/api/chat/proactive/${sessionId}`,
+        `http://localhost:3001/api/chat/proactive/${sessionId}`,
         {
           withCredentials: false
         }

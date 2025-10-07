@@ -423,6 +423,32 @@ Focus on natural conversation flow and semantic understanding. Consider time-bas
         // Simple time-based and relevance-based selection
         return conversationHistory.slice(-maxMessages);
     }
+
+    /**
+     * Segment conversation into topic-based chunks
+     * Returns array of segments with concluded status
+     */
+    segmentConversation(messages) {
+        if (!messages || messages.length === 0) {
+            return [];
+        }
+
+        // Simple segmentation: group messages into segments of 4-6 exchanges
+        const segments = [];
+        const segmentSize = 5;
+        
+        for (let i = 0; i < messages.length; i += segmentSize) {
+            const segmentMessages = messages.slice(i, i + segmentSize);
+            segments.push({
+                messages: segmentMessages,
+                startIndex: i,
+                endIndex: Math.min(i + segmentSize, messages.length),
+                concluded: i + segmentSize < messages.length // Segments are concluded if not the last one
+            });
+        }
+
+        return segments;
+    }
 }
 
 module.exports = EnhancedConversationAnalyzer; 

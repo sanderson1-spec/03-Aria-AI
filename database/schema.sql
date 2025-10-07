@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS personalities (
     definition TEXT NOT NULL,           -- Background information and detailed character traits
     personality_traits TEXT DEFAULT '{}', -- JSON with core personality traits
     communication_style TEXT DEFAULT '{}', -- JSON with communication preferences
+    llm_preferences TEXT DEFAULT NULL,  -- JSON with character-specific LLM configuration (conversational only)
     is_active BOOLEAN DEFAULT 1,        -- Whether the personality is active/available
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

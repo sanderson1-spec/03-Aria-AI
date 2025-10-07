@@ -27,6 +27,7 @@ const ConfigurationService = require('./backend/services/foundation/CORE_Configu
 const DataAccessLayer = require('./backend/dal/CORE_DataAccessLayer');
 const MessageDeliveryService = require('./backend/services/infrastructure/CORE_MessageDeliveryService');
 const SchedulingService = require('./backend/services/infrastructure/CORE_SchedulingService');
+const LLMConfigService = require('./backend/services/infrastructure/CORE_LLMConfigService');
 
 // Intelligence Services  
 const LLMService = require('./backend/services/intelligence/CORE_LLMService');
@@ -323,11 +324,19 @@ async function setupServices(config = {}) {
             dbPath: config.dbPath || path.join(__dirname, 'database', 'aria.db')
         });
 
+        // LLM Configuration Service - Manages LLM model configuration and cascading preferences
+        serviceFactory.registerService('llmConfig', LLMConfigService, [
+            'database',
+            'logger',
+            'errorHandling',
+            'configuration'
+        ]);
+
         // ===== INTELLIGENCE LAYER =====
         // LLM and AI processing services
 
         // LLM Service - Core AI communication
-        serviceFactory.registerService('llm', LLMService, ['logger', 'errorHandling', 'configuration']);
+        serviceFactory.registerService('llm', LLMService, ['logger', 'errorHandling', 'configuration', 'llmConfig']);
 
         // Structured Response Service - JSON processing with LLM
         serviceFactory.registerService('structuredResponse', StructuredResponseService, ['llm', 'logger', 'errorHandling']);

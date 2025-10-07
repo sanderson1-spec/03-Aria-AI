@@ -19,7 +19,7 @@ class CommitmentsRepository extends BaseRepository {
                 SELECT *
                 FROM ${this.tableName}
                 WHERE user_id = ? AND chat_id = ? AND status = 'active'
-                ORDER BY due_date ASC, created_at DESC
+                ORDER BY due_at ASC, created_at DESC
             `;
             
             return await this.dal.query(sql, [userId, chatId]);
@@ -53,11 +53,19 @@ class CommitmentsRepository extends BaseRepository {
                 id: commitmentId,
                 user_id: commitmentData.user_id,
                 chat_id: commitmentData.chat_id,
-                commitment_text: commitmentData.commitment_text,
-                due_date: commitmentData.due_date,
+                character_id: commitmentData.character_id,
+                commitment_type: commitmentData.commitment_type,
+                description: commitmentData.description,
+                context: commitmentData.context || null,
+                character_notes: commitmentData.character_notes || null,
+                assigned_at: now,
+                due_at: commitmentData.due_at || null,
                 status: commitmentData.status || 'active',
-                priority: commitmentData.priority || 'medium',
-                commitment_metadata: this.stringifyJSON(commitmentData.metadata || {}),
+                submission_content: null,
+                submitted_at: null,
+                verification_result: null,
+                verification_reasoning: null,
+                verified_at: null,
                 created_at: now,
                 updated_at: now
             };
@@ -83,11 +91,11 @@ class CommitmentsRepository extends BaseRepository {
             };
 
             // Merge additional update data
-            if (updateData.completion_notes) {
-                updates.completion_notes = updateData.completion_notes;
+            if (updateData.verification_result) {
+                updates.verification_result = updateData.verification_result;
             }
-            if (updateData.metadata) {
-                updates.commitment_metadata = this.stringifyJSON(updateData.metadata);
+            if (updateData.verification_reasoning) {
+                updates.verification_reasoning = updateData.verification_reasoning;
             }
 
             const result = await this.update(updates, { id: commitmentId });
@@ -108,10 +116,10 @@ class CommitmentsRepository extends BaseRepository {
                 FROM ${this.tableName}
                 WHERE user_id = ? 
                 AND status = 'active'
-                AND due_date IS NOT NULL
-                AND datetime(due_date) <= datetime('now', '+' || ? || ' hours')
-                AND datetime(due_date) >= datetime('now')
-                ORDER BY due_date ASC
+                AND due_at IS NOT NULL
+                AND datetime(due_at) <= datetime('now', '+' || ? || ' hours')
+                AND datetime(due_at) >= datetime('now')
+                ORDER BY due_at ASC
             `;
             
             return await this.dal.query(sql, [userId, hoursAhead]);

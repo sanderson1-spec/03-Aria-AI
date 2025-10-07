@@ -307,7 +307,20 @@ class PersonalityRepository extends BaseRepository {
      */
     async getAllCharacters() {
         try {
-            return await this.findAll({ is_active: 1 }, 'updated_at DESC');
+            const characters = await this.findAll({ is_active: 1 }, 'updated_at DESC');
+            
+            // Parse llm_preferences JSON for each character
+            return characters.map(character => {
+                if (character.llm_preferences) {
+                    try {
+                        character.llm_preferences = JSON.parse(character.llm_preferences);
+                    } catch (e) {
+                        // If parsing fails, leave as is
+                        this.logger.warn('Failed to parse llm_preferences JSON', 'PersonalityRepository', { characterId: character.id });
+                    }
+                }
+                return character;
+            });
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get all characters');
         }
@@ -321,7 +334,19 @@ class PersonalityRepository extends BaseRepository {
         try {
             this.validateRequiredFields({ characterId }, ['characterId'], 'get character');
             
-            return await this.findById(characterId);
+            const character = await this.findById(characterId);
+            
+            if (character && character.llm_preferences) {
+                // Parse JSON string to object
+                try {
+                    character.llm_preferences = JSON.parse(character.llm_preferences);
+                } catch (e) {
+                    // If parsing fails, leave as is
+                    this.logger.warn('Failed to parse llm_preferences JSON', 'PersonalityRepository', { characterId });
+                }
+            }
+            
+            return character;
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get character');
         }
@@ -401,8 +426,14 @@ class PersonalityRepository extends BaseRepository {
             if (updateData.avatar !== undefined) {
                 data.display = updateData.avatar || 'default.png';
             }
+            if (updateData.llm_preferences !== undefined) {
+                // Store as JSON string if it's an object, or as-is if null
+                data.llm_preferences = updateData.llm_preferences !== null 
+                    ? JSON.stringify(updateData.llm_preferences)
+                    : null;
+            }
 
-            const result = await this.update(data, { id: characterId });
+            const result = await this.dal.update(this.tableName, data, { id: characterId });
             
             return { updated: result.changes > 0 };
         } catch (error) {

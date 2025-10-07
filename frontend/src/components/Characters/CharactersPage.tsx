@@ -10,6 +10,18 @@ interface Character {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  llm_preferences?: {
+    conversational?: {
+      model?: string;
+      temperature?: number;
+      max_tokens?: number;
+    };
+  };
+}
+
+interface LLMModel {
+  id: string;
+  name: string;
 }
 
 
@@ -19,6 +31,7 @@ const CharactersPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadCharacters();
@@ -26,7 +39,7 @@ const CharactersPage: React.FC = () => {
 
   const loadCharacters = async () => {
     try {
-      const response = await fetch('http://localhost:3002/api/characters');
+      const response = await fetch('http://localhost:3001/api/characters');
       const data = await response.json();
       
       if (data.success) {
@@ -47,7 +60,7 @@ const CharactersPage: React.FC = () => {
     if (!confirm('Are you sure you want to delete this character?')) return;
     
     try {
-      const response = await fetch(`http://localhost:3002/api/characters/${characterId}`, {
+      const response = await fetch(`http://localhost:3001/api/characters/${characterId}`, {
         method: 'DELETE'
       });
       
@@ -62,6 +75,81 @@ const CharactersPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to delete character:', error);
       setMessage({ type: 'error', text: 'Failed to delete character' });
+    }
+  };
+
+  const exportCharacter = async (characterId: string) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/characters/${characterId}/export?userId=default-user`);
+      const data = await response.json();
+      
+      // Create a blob from the JSON data
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      
+      // Create a download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${data.character.name.replace(/[^a-zA-Z0-9]/g, '_')}_character_export.json`;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      setMessage({ type: 'success', text: 'Character exported successfully' });
+    } catch (error) {
+      console.error('Failed to export character:', error);
+      setMessage({ type: 'error', text: 'Failed to export character' });
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const fileContent = await file.text();
+      const importData = JSON.parse(fileContent);
+
+      const response = await fetch('http://localhost:3001/api/characters/import?userId=default-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(importData)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await loadCharacters();
+        const warningMessage = data.warnings && data.warnings.length > 0 
+          ? ` (${data.warnings.join(', ')})` 
+          : '';
+        setMessage({ 
+          type: 'success', 
+          text: `Character imported successfully${warningMessage}` 
+        });
+      } else {
+        throw new Error(data.error || 'Failed to import character');
+      }
+    } catch (error) {
+      console.error('Failed to import character:', error);
+      setMessage({ 
+        type: 'error', 
+        text: error instanceof Error ? error.message : 'Failed to import character' 
+      });
+    } finally {
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -89,13 +177,30 @@ const CharactersPage: React.FC = () => {
               </h1>
               <p className="text-gray-600 mt-2">Create and manage your AI characters</p>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
-            >
-              + Create Character
-            </button>
+            <div className="flex space-x-3">
+              <button
+                onClick={handleImportClick}
+                className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center"
+              >
+                <span className="mr-2">📥</span>
+                Import
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                + Create Character
+              </button>
+            </div>
           </div>
+          {/* Hidden file input for import */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={handleFileImport}
+            className="hidden"
+          />
         </div>
 
         {/* Message */}
@@ -177,16 +282,24 @@ const CharactersPage: React.FC = () => {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => setEditingCharacter(character)}
-                        className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
-                      >
-                        Edit
-                      </button>
+                    <div className="space-y-2">
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => setEditingCharacter(character)}
+                          className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => exportCharacter(character.id)}
+                          className="flex-1 bg-green-50 hover:bg-green-100 text-green-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                        >
+                          📥 Export
+                        </button>
+                      </div>
                       <button
                         onClick={() => deleteCharacter(character.id)}
-                        className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                        className="w-full bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
                       >
                         Delete
                       </button>
@@ -237,6 +350,14 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
     avatar: ''
   });
   const [saving, setSaving] = useState(false);
+  const [availableModels, setAvailableModels] = useState<LLMModel[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  
+  // LLM override state
+  const [useCustomModel, setUseCustomModel] = useState(false);
+  const [customModel, setCustomModel] = useState('');
+  const [customTemperature, setCustomTemperature] = useState(0.7);
+  const [customMaxTokens, setCustomMaxTokens] = useState(2000);
 
   useEffect(() => {
     if (character) {
@@ -246,8 +367,53 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
         background: character.definition || '',
         avatar: character.display !== 'default.png' ? character.display : ''
       });
+      
+      // Load LLM preferences if they exist
+      if (character.llm_preferences?.conversational) {
+        setUseCustomModel(true);
+        setCustomModel(character.llm_preferences.conversational.model || '');
+        setCustomTemperature(character.llm_preferences.conversational.temperature ?? 0.7);
+        setCustomMaxTokens(character.llm_preferences.conversational.max_tokens ?? 2000);
+      } else {
+        // Reset LLM preferences if character doesn't have them
+        setUseCustomModel(false);
+        setCustomModel('');
+        setCustomTemperature(0.7);
+        setCustomMaxTokens(2000);
+      }
+    } else {
+      // Reset all form data for new character
+      setFormData({
+        name: '',
+        description: '',
+        background: '',
+        avatar: ''
+      });
+      setUseCustomModel(false);
+      setCustomModel('');
+      setCustomTemperature(0.7);
+      setCustomMaxTokens(2000);
     }
+    
+    // Load available models
+    loadAvailableModels();
   }, [character]);
+  
+  const loadAvailableModels = async () => {
+    setLoadingModels(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/llm/models');
+      const data = await response.json();
+      
+      if (data.success) {
+        setAvailableModels(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load available models:', error);
+    } finally {
+      setLoadingModels(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -259,17 +425,33 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
     
     try {
       const url = character 
-        ? `http://localhost:3002/api/characters/${character.id}`
-        : 'http://localhost:3002/api/characters';
+        ? `http://localhost:3001/api/characters/${character.id}`
+        : 'http://localhost:3001/api/characters';
       
       const method = character ? 'PUT' : 'POST';
+      
+      // Build request body with optional llm_preferences
+      const requestBody: any = { ...formData };
+      
+      if (useCustomModel && customModel) {
+        requestBody.llm_preferences = {
+          conversational: {
+            model: customModel,
+            temperature: customTemperature,
+            max_tokens: customMaxTokens
+          }
+        };
+      } else {
+        // Set to null to clear any existing preferences
+        requestBody.llm_preferences = null;
+      }
       
       const response = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(requestBody)
       });
       
       const data = await response.json();
@@ -277,11 +459,11 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
       if (data.success) {
         onSave();
       } else {
-        throw new Error(data.error);
+        throw new Error(data.error || data.details);
       }
     } catch (error) {
       console.error('Failed to save character:', error);
-      alert('Failed to save character');
+      alert(`Failed to save character: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
@@ -368,6 +550,92 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="https://example.com/avatar.jpg"
             />
+          </div>
+
+          {/* LLM Override Section */}
+          <div className="border-t pt-4 mt-4">
+            <div className="flex items-center mb-3">
+              <input
+                type="checkbox"
+                id="useCustomModel"
+                checked={useCustomModel}
+                onChange={(e) => setUseCustomModel(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+              />
+              <label htmlFor="useCustomModel" className="ml-2 text-sm font-medium text-gray-700">
+                🤖 Use custom model for this character
+              </label>
+            </div>
+            
+            <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+              ℹ️ <strong>Note:</strong> Only the conversational model can be customized per character. The analytical model always uses the global configuration.
+            </div>
+
+            {useCustomModel && (
+              <div className="space-y-4 pl-6 border-l-2 border-blue-200">
+                {/* Model Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Model
+                  </label>
+                  {loadingModels ? (
+                    <div className="text-sm text-gray-500">Loading models...</div>
+                  ) : (
+                    <select
+                      value={customModel}
+                      onChange={(e) => setCustomModel(e.target.value)}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select a model...</option>
+                      {availableModels.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Temperature */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Temperature: {customTemperature.toFixed(2)}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={customTemperature}
+                    onChange={(e) => setCustomTemperature(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>Precise (0.0)</span>
+                    <span>Balanced (0.5)</span>
+                    <span>Creative (1.0)</span>
+                  </div>
+                </div>
+
+                {/* Max Tokens */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Max Tokens
+                  </label>
+                  <input
+                    type="number"
+                    value={customMaxTokens}
+                    onChange={(e) => setCustomMaxTokens(parseInt(e.target.value) || 0)}
+                    min="100"
+                    max="8000"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum response length (100-8000)
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

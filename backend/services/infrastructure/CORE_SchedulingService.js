@@ -111,9 +111,9 @@ class SchedulingService extends AbstractService {
             const sql = `
                 SELECT * FROM proactive_engagements
                 WHERE status = 'pending' 
-                AND scheduled_for IS NOT NULL
-                AND datetime(scheduled_for) <= datetime('now')
-                ORDER BY scheduled_for ASC
+                AND optimal_timing IS NOT NULL
+                AND datetime(optimal_timing) <= datetime('now')
+                ORDER BY optimal_timing ASC
             `;
 
             const dueMessages = await this.dal.query(sql, []);
@@ -163,7 +163,7 @@ class SchedulingService extends AbstractService {
             this.logger.info('Delivering scheduled message', 'SchedulingService', {
                 engagementId: engagement.id,
                 sessionId: engagement.session_id,
-                scheduledFor: engagement.scheduled_for
+                scheduledFor: engagement.optimal_timing
             });
 
             // Trigger message delivery via message delivery service

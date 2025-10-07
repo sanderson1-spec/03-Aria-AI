@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CollapsiblePsychologySection } from './CollapsiblePsychologySection';
+import CommitmentPanel from './CommitmentPanel';
 import { useChatContext } from '../../contexts/ChatContext';
 import { useProactiveMessages } from '../../hooks/useProactiveMessages';
 import type { Message } from '../../types';
@@ -113,7 +114,7 @@ const ChatPage: React.FC = () => {
     
     try {
       // Use fetch with streaming handling
-      const response = await fetch('http://localhost:3002/api/chat/stream', {
+      const response = await fetch('http://localhost:3001/api/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -286,6 +287,16 @@ const ChatPage: React.FC = () => {
           sessionId={currentChat.id}
           className="m-4"
         />
+      )}
+
+      {/* Commitment Panel */}
+      {currentChat && (
+        <div className="m-4">
+          <CommitmentPanel 
+            chatId={currentChat.id} 
+            userId="user-1"
+          />
+        </div>
       )}
 
       {/* Messages - Scrollable Area with Fixed Height */}

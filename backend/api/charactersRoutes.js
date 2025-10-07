@@ -113,7 +113,7 @@ class CharactersRoutes {
         this.router.put('/:characterId', async (req, res) => {
             try {
                 const { characterId } = req.params;
-                const { name, description, background, avatar } = req.body;
+                const { name, description, background, avatar, llm_preferences } = req.body;
                 const databaseService = this.serviceFactory.get('database');
                 
                 // Check if character exists
@@ -124,12 +124,35 @@ class CharactersRoutes {
                     });
                 }
                 
+                // Validate llm_preferences if provided
+                if (llm_preferences !== undefined) {
+                    // Must be an object or null
+                    if (llm_preferences !== null && (typeof llm_preferences !== 'object' || Array.isArray(llm_preferences))) {
+                        return res.status(400).json({
+                            error: 'Invalid llm_preferences format',
+                            details: 'llm_preferences must be an object or null'
+                        });
+                    }
+                    
+                    // If it's an object, check for disallowed keys
+                    if (llm_preferences && typeof llm_preferences === 'object') {
+                        // Characters can only override 'conversational', not 'analytical'
+                        if (llm_preferences.analytical !== undefined) {
+                            return res.status(400).json({
+                                error: 'Invalid llm_preferences',
+                                details: 'Characters cannot override analytical model configuration. Only conversational overrides are allowed.'
+                            });
+                        }
+                    }
+                }
+                
                 const updateData = {};
                 
                 if (name !== undefined) updateData.name = name.trim();
                 if (description !== undefined) updateData.description = description.trim();
                 if (background !== undefined) updateData.background = background.trim();
                 if (avatar !== undefined) updateData.avatar = avatar;
+                if (llm_preferences !== undefined) updateData.llm_preferences = llm_preferences;
                 
                 const result = await databaseService.getDAL().personalities.updateCharacter(characterId, updateData);
                 
@@ -174,6 +197,170 @@ class CharactersRoutes {
                 console.error('Character Delete API Error:', error);
                 res.status(500).json({ 
                     error: 'Failed to delete character', 
+                    details: error.message 
+                });
+            }
+        });
+
+        // Export a character as JSON file
+        this.router.get('/:characterId/export', async (req, res) => {
+            try {
+                const { characterId } = req.params;
+                const { userId = 'system' } = req.query;
+                const databaseService = this.serviceFactory.get('database');
+                
+                // Fetch character from database
+                const character = await databaseService.getDAL().personalities.getCharacter(characterId);
+                
+                if (!character) {
+                    return res.status(404).json({ 
+                        error: 'Character not found' 
+                    });
+                }
+                
+                // Format export data with version and metadata
+                const exportData = {
+                    version: '1.0',
+                    character: {
+                        name: character.name,
+                        description: character.description || '',
+                        background: character.background || '',
+                        traits: character.traits || '',
+                        avatar: character.avatar || null,
+                        llm_preferences: character.llm_preferences || null
+                    },
+                    exported_by: userId,
+                    exported_at: new Date().toISOString()
+                };
+                
+                // Set headers for file download
+                const filename = `${character.name.replace(/[^a-zA-Z0-9]/g, '_')}_character_export.json`;
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+                
+                res.json(exportData);
+
+            } catch (error) {
+                console.error('Character Export API Error:', error);
+                res.status(500).json({ 
+                    error: 'Failed to export character', 
+                    details: error.message 
+                });
+            }
+        });
+
+        // Import a character from JSON file
+        this.router.post('/import', async (req, res) => {
+            try {
+                const importData = req.body;
+                const { userId = 'system' } = req.query;
+                const databaseService = this.serviceFactory.get('database');
+                
+                // Validate JSON structure
+                if (!importData || typeof importData !== 'object') {
+                    return res.status(400).json({
+                        error: 'Invalid import data',
+                        details: 'Import data must be a valid JSON object'
+                    });
+                }
+                
+                if (!importData.version) {
+                    return res.status(400).json({
+                        error: 'Invalid import format',
+                        details: 'Missing version field'
+                    });
+                }
+                
+                if (!importData.character || typeof importData.character !== 'object') {
+                    return res.status(400).json({
+                        error: 'Invalid import format',
+                        details: 'Missing or invalid character field'
+                    });
+                }
+                
+                const characterData = importData.character;
+                
+                // Validate required fields
+                if (!characterData.name || !characterData.name.trim()) {
+                    return res.status(400).json({
+                        error: 'Invalid character data',
+                        details: 'Character name is required'
+                    });
+                }
+                
+                // Check and validate LLM preferences if present
+                let validatedLLMPreferences = characterData.llm_preferences;
+                
+                if (validatedLLMPreferences && typeof validatedLLMPreferences === 'object') {
+                    // Validate that only conversational preferences are set
+                    if (validatedLLMPreferences.analytical !== undefined) {
+                        return res.status(400).json({
+                            error: 'Invalid llm_preferences',
+                            details: 'Characters cannot override analytical model configuration'
+                        });
+                    }
+                    
+                    // Check if the specified conversational model exists
+                    if (validatedLLMPreferences.conversational?.model) {
+                        try {
+                            const llmConfigService = this.serviceFactory.get('llmConfig');
+                            const availableModels = await llmConfigService.getAvailableModels();
+                            const modelExists = availableModels.some(m => m.id === validatedLLMPreferences.conversational.model);
+                            
+                            if (!modelExists) {
+                                console.warn('Imported character model not found, falling back to user default', {
+                                    requestedModel: validatedLLMPreferences.conversational.model
+                                });
+                                
+                                // Fall back to user default by getting user preferences
+                                const userPrefs = await llmConfigService.getUserLLMPreferences(userId);
+                                if (userPrefs?.conversational?.model) {
+                                    validatedLLMPreferences.conversational.model = userPrefs.conversational.model;
+                                } else {
+                                    // If no user default, fall back to global default
+                                    const globalConfig = await llmConfigService.getGlobalLLMConfig('conversational');
+                                    if (globalConfig?.model) {
+                                        validatedLLMPreferences.conversational.model = globalConfig.model;
+                                    } else {
+                                        // Remove LLM preferences if no fallback is available
+                                        validatedLLMPreferences = null;
+                                    }
+                                }
+                            }
+                        } catch (llmConfigError) {
+                            console.error('Error validating LLM model, removing preferences:', llmConfigError);
+                            validatedLLMPreferences = null;
+                        }
+                    }
+                }
+                
+                // Create character with new ID
+                const characterId = uuidv4();
+                const newCharacterData = {
+                    id: characterId,
+                    name: characterData.name.trim(),
+                    description: characterData.description?.trim() || '',
+                    background: characterData.background?.trim() || '',
+                    traits: characterData.traits?.trim() || '',
+                    avatar: characterData.avatar || null,
+                    llm_preferences: validatedLLMPreferences
+                };
+                
+                const result = await databaseService.getDAL().personalities.createCharacter(newCharacterData);
+                
+                res.json({
+                    success: true,
+                    data: { ...newCharacterData, ...result },
+                    message: 'Character imported successfully',
+                    warnings: validatedLLMPreferences !== characterData.llm_preferences 
+                        ? ['LLM model preferences were adjusted due to unavailable model']
+                        : []
+                });
+
+            } catch (error) {
+                console.error('Character Import API Error:', error);
+                res.status(500).json({ 
+                    error: 'Failed to import character', 
                     details: error.message 
                 });
             }

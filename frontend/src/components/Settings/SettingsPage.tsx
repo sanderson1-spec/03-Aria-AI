@@ -37,11 +37,26 @@ const SettingsPage: React.FC = () => {
 
   const loadSettings = async () => {
     try {
-      const response = await fetch('http://localhost:3002/api/settings/current');
+      const response = await fetch('http://localhost:3001/api/llm/config');
       const data = await response.json();
       
       if (data.success) {
-        setSettings(data.data);
+        // Map the response to our settings format
+        const globalConfig = data.data.global || {};
+        const userConfig = data.data.user || {};
+        
+        setSettings({
+          llm: {
+            model: userConfig.conversational?.model || globalConfig.conversational?.model || 'meta-llama-3.1-8b-instruct',
+            endpoint: process.env.LLM_ENDPOINT || 'http://192.168.178.182:1234/v1/chat/completions',
+            temperature: userConfig.conversational?.temperature || globalConfig.conversational?.temperature || 0.7,
+            maxTokens: userConfig.conversational?.max_tokens || globalConfig.conversational?.max_tokens || 2048
+          },
+          ui: {
+            theme: 'light',
+            language: 'en'
+          }
+        });
       } else {
         throw new Error(data.error);
       }
@@ -53,11 +68,11 @@ const SettingsPage: React.FC = () => {
 
   const loadModels = async () => {
     try {
-      const response = await fetch('http://localhost:3002/api/settings/models');
+      const response = await fetch('http://localhost:3001/api/llm/models');
       const data = await response.json();
       
       if (data.success) {
-        setModels(data.data.models);
+        setModels(data.data || []);
       } else {
         throw new Error(data.error);
       }
@@ -76,12 +91,21 @@ const SettingsPage: React.FC = () => {
     setMessage(null);
     
     try {
-      const response = await fetch('http://localhost:3002/api/settings/update', {
+      const response = await fetch('http://localhost:3001/api/llm/config/user', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(settings)
+        body: JSON.stringify({
+          userId: 'user-1', // Default user
+          preferences: {
+            conversational: {
+              model: settings.llm.model,
+              temperature: settings.llm.temperature,
+              max_tokens: settings.llm.maxTokens
+            }
+          }
+        })
       });
       
       const data = await response.json();
@@ -89,7 +113,7 @@ const SettingsPage: React.FC = () => {
       if (data.success) {
         setMessage({ 
           type: 'success', 
-          text: data.note || 'Settings updated successfully' 
+          text: 'Settings updated successfully' 
         });
       } else {
         throw new Error(data.error);
