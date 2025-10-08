@@ -8,6 +8,7 @@ interface Character {
   display: string;
   description: string;
   definition: string;
+  user_id?: string;
   usage_count: number;
   is_active: boolean;
   created_at: string;
@@ -29,6 +30,9 @@ interface LLMModel {
 
 
 const CharactersPage: React.FC = () => {
+  // TODO: Get userId from auth context once authentication is implemented
+  const userId = "default-user";
+  
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -42,7 +46,7 @@ const CharactersPage: React.FC = () => {
 
   const loadCharacters = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/characters`);
+      const response = await fetch(`${API_BASE_URL}/api/characters?userId=${userId}`);
       const data = await response.json();
       
       if (data.success) {
@@ -81,7 +85,7 @@ const CharactersPage: React.FC = () => {
     setMessage({ type: 'success', text: `Deleting ${characterName}...` });
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/characters/${characterId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/characters/${characterId}?userId=${userId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
@@ -110,7 +114,7 @@ const CharactersPage: React.FC = () => {
 
   const exportCharacter = async (characterId: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/characters/${characterId}/export?userId=default-user`);
+      const response = await fetch(`${API_BASE_URL}/api/characters/${characterId}/export?userId=${userId}`);
       const data = await response.json();
       
       // Create a blob from the JSON data
@@ -166,7 +170,7 @@ const CharactersPage: React.FC = () => {
       setMessage({ type: 'success', text: 'Uploading to server...' });
 
       // Send to server
-      const response = await fetch(`${API_BASE_URL}/api/characters/import?userId=default-user`, {
+      const response = await fetch(`${API_BASE_URL}/api/characters/import?userId=${userId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -382,6 +386,7 @@ const CharactersPage: React.FC = () => {
         {(showCreateModal || editingCharacter) && (
           <CharacterModal
             character={editingCharacter}
+            userId={userId}
             onClose={() => {
               setShowCreateModal(false);
               setEditingCharacter(null);
@@ -405,11 +410,12 @@ const CharactersPage: React.FC = () => {
 // Character Modal Component
 interface CharacterModalProps {
   character: Character | null;
+  userId: string;
   onClose: () => void;
   onSave: () => void;
 }
 
-const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onSave }) => {
+const CharacterModal: React.FC<CharacterModalProps> = ({ character, userId, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: character?.name || '',
     description: character?.description || '',
@@ -496,13 +502,18 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
     
     try {
       const url = character 
-        ? `${API_BASE_URL}/api/characters/${character.id}`
-        : `${API_BASE_URL}/api/characters`;
+        ? `${API_BASE_URL}/api/characters/${character.id}?userId=${userId}`
+        : `${API_BASE_URL}/api/characters?userId=${userId}`;
       
       const method = character ? 'PUT' : 'POST';
       
       // Build request body with optional llm_preferences
       const requestBody: any = { ...formData };
+      
+      // Include user_id for new character creation
+      if (!character) {
+        requestBody.user_id = userId;
+      }
       
       if (useCustomModel && customModel) {
         requestBody.llm_preferences = {

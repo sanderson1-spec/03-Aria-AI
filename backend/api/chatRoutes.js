@@ -173,7 +173,16 @@ class ChatRoutes {
                 // Get character information
                 const character = await databaseService.getDAL().personalities.getCharacter(characterId);
                 if (!character) {
-                    return res.status(400).json({ 
+                    return res.status(404).json({ 
+                        success: false, 
+                        error: 'Character not found',
+                        details: `Character with ID ${characterId} does not exist`
+                    });
+                }
+
+                // Verify character belongs to user
+                if (character.user_id !== userId) {
+                    return res.status(404).json({ 
                         success: false, 
                         error: 'Character not found',
                         details: `Character with ID ${characterId} does not exist`
@@ -339,6 +348,17 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 // Get character information (fast database lookup)
                 const character = await databaseService.getDAL().personalities.getCharacter(characterId);
                 if (!character) {
+                    res.write(`data: ${JSON.stringify({
+                        type: 'error',
+                        error: 'Character not found',
+                        details: `Character with ID ${characterId} does not exist`
+                    })}\n\n`);
+                    res.end();
+                    return;
+                }
+
+                // Verify character belongs to user
+                if (character.user_id !== userId) {
                     res.write(`data: ${JSON.stringify({
                         type: 'error',
                         error: 'Character not found',
