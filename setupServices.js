@@ -27,6 +27,7 @@ const ConfigurationService = require('./backend/services/foundation/CORE_Configu
 const DataAccessLayer = require('./backend/dal/CORE_DataAccessLayer');
 const MessageDeliveryService = require('./backend/services/infrastructure/CORE_MessageDeliveryService');
 const SchedulingService = require('./backend/services/infrastructure/CORE_SchedulingService');
+const LLMConfigService = require('./backend/services/infrastructure/CORE_LLMConfigService');
 
 // Intelligence Services  
 const LLMService = require('./backend/services/intelligence/CORE_LLMService');
@@ -34,6 +35,7 @@ const StructuredResponseService = require('./backend/services/intelligence/CORE_
 
 // Domain Services
 const PsychologyService = require('./backend/services/domain/CORE_PsychologyService');
+const TaskVerificationService = require('./backend/services/domain/CORE_TaskVerificationService');
 const ConversationAnalyzer = require('./backend/services/domain/CORE_ConversationAnalyzer');
 const ProactiveIntelligenceService = require('./backend/services/domain/CORE_ProactiveIntelligenceService');
 const ProactiveLearningService = require('./backend/services/domain/CORE_ProactiveLearningService');
@@ -323,11 +325,19 @@ async function setupServices(config = {}) {
             dbPath: config.dbPath || path.join(__dirname, 'database', 'aria.db')
         });
 
+        // LLM Configuration Service - Manages LLM model configuration and cascading preferences
+        serviceFactory.registerService('llmConfig', LLMConfigService, [
+            'database',
+            'logger',
+            'errorHandling',
+            'configuration'
+        ]);
+
         // ===== INTELLIGENCE LAYER =====
         // LLM and AI processing services
 
         // LLM Service - Core AI communication
-        serviceFactory.registerService('llm', LLMService, ['logger', 'errorHandling', 'configuration']);
+        serviceFactory.registerService('llm', LLMService, ['logger', 'errorHandling', 'configuration', 'llmConfig']);
 
         // Structured Response Service - JSON processing with LLM
         serviceFactory.registerService('structuredResponse', StructuredResponseService, ['llm', 'logger', 'errorHandling']);
@@ -356,6 +366,11 @@ async function setupServices(config = {}) {
         // Psychology Service - Character psychology and behavior
         serviceFactory.registerService('psychology', PsychologyService, [
             'database', 'logger', 'errorHandling', 'structuredResponse'
+        ]);
+
+        // Task Verification Service - AI-driven commitment verification
+        serviceFactory.registerService('taskVerification', TaskVerificationService, [
+            'database', 'logger', 'errorHandling', 'structuredResponse', 'psychology'
         ]);
 
         // Conversation Analyzer - Conversation flow and context analysis

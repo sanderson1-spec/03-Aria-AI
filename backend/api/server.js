@@ -4,6 +4,8 @@ const ChatRoutes = require('./chatRoutes');
 const SettingsRoutes = require('./settingsRoutes');
 const CharactersRoutes = require('./charactersRoutes');
 const ProactiveRoutes = require('./proactiveRoutes');
+const LLMSettingsRoutes = require('./llmSettingsRoutes');
+const CommitmentRoutes = require('./commitmentRoutes');
 const { setupWebSocketServer } = require('./websocket');
 
 class APIServer {
@@ -59,6 +61,14 @@ class APIServer {
         // Proactive routes
         const proactiveRoutes = new ProactiveRoutes(this.serviceFactory);
         this.app.use('/api/proactive', proactiveRoutes.getRouter());
+
+        // LLM Settings routes
+        const llmSettingsRoutes = new LLMSettingsRoutes(this.serviceFactory);
+        this.app.use('/api/llm', llmSettingsRoutes.getRouter());
+
+        // Commitment routes
+        const commitmentRoutes = new CommitmentRoutes(this.serviceFactory);
+        this.app.use('/api/commitments', commitmentRoutes.getRouter());
 
         // 404 handler
         this.app.use((req, res) => {

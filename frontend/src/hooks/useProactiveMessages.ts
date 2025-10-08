@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Message } from '../types';
 
 interface ProactiveMessageEvent {
@@ -22,40 +22,56 @@ export const useProactiveMessages = ({
 }: UseProactiveMessagesProps) => {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const currentSessionRef = useRef<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  
+  // Store latest callback ref to avoid dependency issues
+  const onProactiveMessageRef = useRef(onProactiveMessage);
+  useEffect(() => {
+    onProactiveMessageRef.current = onProactiveMessage;
+  }, [onProactiveMessage]);
 
-  const cleanup = useCallback(() => {
-    console.log('🧹 Cleaning up proactive connection for session:', sessionId);
+  useEffect(() => {
+    // Skip if disabled or no session
+    if (!sessionId || !enabled) {
+      // Cleanup existing connection
+      if (eventSourceRef.current) {
+        console.log('🧹 Cleaning up proactive connection for session:', currentSessionRef.current);
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+        currentSessionRef.current = null;
+        setIsConnected(false);
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    // If already connected to the same session, skip
+    if (eventSourceRef.current && currentSessionRef.current === sessionId) {
+      console.log('✅ Already connected to session:', sessionId);
+      return;
+    }
+
+    // Cleanup previous connection if switching sessions
     if (eventSourceRef.current) {
+      console.log('🧹 Cleaning up proactive connection for session:', currentSessionRef.current);
       eventSourceRef.current.close();
       eventSourceRef.current = null;
+      setIsConnected(false);
     }
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-    setIsConnected(false);
-  }, [sessionId]);
 
-  const connect = useCallback(() => {
-    console.log('🔗 Attempting to connect proactive messaging for session:', sessionId, 'enabled:', enabled, 'isConnected:', isConnected);
-    
-    if (!sessionId || !enabled) {
-      console.log('❌ Cannot connect: missing sessionId or disabled');
-      return;
-    }
-
-    // Don't cleanup if already connected to same session
-    if (eventSourceRef.current && isConnected) {
-      console.log('✅ Already connected, skipping reconnection');
-      return;
-    }
-
-    cleanup();
+    console.log('🔗 Attempting to connect proactive messaging for session:', sessionId, 'enabled:', enabled);
 
     try {
       const eventSource = new EventSource(
-        `http://localhost:3002/api/chat/proactive/${sessionId}`,
+        `http://localhost:3001/api/chat/proactive/${sessionId}`,
         {
           withCredentials: false
         }
@@ -78,7 +94,7 @@ export const useProactiveMessages = ({
             case 'proactive-message':
               if (data.message) {
                 console.log('📨 Received proactive message:', data.message);
-                onProactiveMessage(data.message);
+                onProactiveMessageRef.current(data.message);
               }
               break;
               
@@ -102,40 +118,57 @@ export const useProactiveMessages = ({
         console.error(`❌ Proactive message stream error for session ${sessionId}:`, error);
         setIsConnected(false);
         
-        // Attempt to reconnect after a delay
-        reconnectTimeoutRef.current = setTimeout(() => {
-          console.log(`🔄 Attempting to reconnect proactive message stream for session ${sessionId}`);
-          connect();
-        }, 5000); // Retry after 5 seconds
+        // Don't attempt reconnect on error - let useEffect handle reconnection
+        // This prevents infinite loops during connection failures
       };
 
       eventSourceRef.current = eventSource;
+      currentSessionRef.current = sessionId;
 
     } catch (error) {
       console.error('Error establishing proactive message stream:', error);
       setIsConnected(false);
     }
-  }, [sessionId, enabled, onProactiveMessage, cleanup]);
 
-  // Connect when sessionId changes or component mounts
-  useEffect(() => {
-    if (sessionId && enabled) {
-      connect();
-    } else {
-      cleanup();
-    }
-
-    return cleanup;
-  }, [sessionId, enabled, connect, cleanup]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return cleanup;
-  }, [cleanup]);
+    // Cleanup function
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (eventSourceRef.current) {
+        console.log('🧹 Cleaning up proactive connection for session:', sessionId);
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+        currentSessionRef.current = null;
+        setIsConnected(false);
+      }
+    };
+  }, [sessionId, enabled]);
 
   return {
-    isConnected: isConnected,
-    reconnect: connect,
-    disconnect: cleanup
+    isConnected,
+    reconnect: () => {
+      // Force reconnect by clearing current session ref
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      currentSessionRef.current = null;
+      setIsConnected(false);
+    },
+    disconnect: () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (eventSourceRef.current) {
+        console.log('🧹 Manually disconnecting session:', currentSessionRef.current);
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+        currentSessionRef.current = null;
+        setIsConnected(false);
+      }
+    }
   };
 };

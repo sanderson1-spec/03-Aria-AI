@@ -27,6 +27,7 @@ class LLMService extends AbstractService {
         this.logger = dependencies.logger;
         this.errorHandler = dependencies.errorHandling;
         this.configuration = dependencies.configuration;
+        this.llmConfig = dependencies.llmConfig; // LLM Configuration Service
         
         // CLEAN ARCHITECTURE: LLM configuration and connection
         this.config = null;
@@ -271,13 +272,69 @@ class LLMService extends AbstractService {
     async prepareStreamingRequestBody(prompt, context, options) {
         const messages = await this.buildConversationMessages(prompt, context, options);
         
-        return {
-            model: this.config.model,
+        // Resolve model configuration with cascade: character → user → global
+        let resolvedConfig = null;
+        let model = this.config.model;
+        let temperature = options?.temperature || this.config?.temperature || 0.7;
+        let maxTokens = options?.maxTokens || this.config?.maxTokens || 2048;
+        
+        // Determine role based on options (default to conversational)
+        const role = options?.role || 'conversational';
+        
+        // Try to resolve config if llmConfig service is available and we have user context
+        if (this.llmConfig && (options?.userId || options?.characterId)) {
+            try {
+                resolvedConfig = await this.llmConfig.resolveModelConfig(
+                    options.userId,
+                    options.characterId,
+                    role
+                );
+                
+                if (resolvedConfig) {
+                    // Use resolved config values, falling back to defaults
+                    model = resolvedConfig.model || model;
+                    temperature = resolvedConfig.temperature !== undefined ? resolvedConfig.temperature : temperature;
+                    maxTokens = resolvedConfig.max_tokens !== undefined ? resolvedConfig.max_tokens : maxTokens;
+                    
+                    this.logger.debug('Using resolved model config for streaming', 'LLM', { 
+                        model, 
+                        role,
+                        userId: options.userId,
+                        characterId: options.characterId
+                    });
+                }
+            } catch (error) {
+                // Log warning but continue with defaults (backward compatibility)
+                this.logger.warn('Failed to resolve model config for streaming, using defaults', 'LLM', { 
+                    error: error.message 
+                });
+            }
+        }
+        
+        // Get server type from configuration
+        const serverType = this.config?.serverType || 'lmstudio';
+        
+        // Build base config
+        const baseConfig = {
+            model: model,
             messages: messages,
-            max_tokens: options?.maxTokens || this.config?.maxTokens || 2048,
-            temperature: options?.temperature || this.config?.temperature || 0.7,
+            max_tokens: maxTokens,
+            temperature: temperature,
             stream: true // Enable streaming
         };
+        
+        // Adapt parameters for server type
+        const adaptedConfig = this.adaptParameters(baseConfig, serverType);
+        
+        this.logger.debug('Prepared streaming request body', 'LLM', {
+            model: adaptedConfig.model,
+            temperature: adaptedConfig.temperature,
+            maxTokens: adaptedConfig.max_tokens || adaptedConfig.num_predict,
+            messagesCount: adaptedConfig.messages?.length,
+            endpoint: this.config.endpoint
+        });
+        
+        return adaptedConfig;
     }
 
     /**
@@ -312,6 +369,14 @@ class LLMService extends AbstractService {
                     'Cache-Control': 'no-cache'
                 }
             };
+            
+            this.logger.debug('Making streaming HTTP request', 'LLM', {
+                hostname: requestOptions.hostname,
+                port: requestOptions.port,
+                path: requestOptions.path,
+                model: requestBody.model,
+                messagesCount: requestBody.messages?.length
+            });
             
             const req = client.request(requestOptions, (res) => {
                 if (res.statusCode !== 200) {
@@ -559,13 +624,61 @@ class LLMService extends AbstractService {
             request.options
         );
         
-        return {
-            model: this.config.model,
+        // Resolve model configuration with cascade: character → user → global
+        let resolvedConfig = null;
+        let model = this.config.model;
+        let temperature = request.options?.temperature || this.config?.temperature || 0.7;
+        let maxTokens = request.options?.maxTokens || this.config?.maxTokens || 2048;
+        
+        // Determine role based on request options (default to conversational)
+        const role = request.options?.role || 'conversational';
+        
+        // Try to resolve config if llmConfig service is available and we have user context
+        if (this.llmConfig && (request.options?.userId || request.options?.characterId)) {
+            try {
+                resolvedConfig = await this.llmConfig.resolveModelConfig(
+                    request.options.userId,
+                    request.options.characterId,
+                    role
+                );
+                
+                if (resolvedConfig) {
+                    // Use resolved config values, falling back to defaults
+                    model = resolvedConfig.model || model;
+                    temperature = resolvedConfig.temperature !== undefined ? resolvedConfig.temperature : temperature;
+                    maxTokens = resolvedConfig.max_tokens !== undefined ? resolvedConfig.max_tokens : maxTokens;
+                    
+                    this.logger.debug('Using resolved model config', 'LLM', { 
+                        model, 
+                        role,
+                        userId: request.options.userId,
+                        characterId: request.options.characterId
+                    });
+                }
+            } catch (error) {
+                // Log warning but continue with defaults (backward compatibility)
+                this.logger.warn('Failed to resolve model config, using defaults', 'LLM', { 
+                    error: error.message 
+                });
+            }
+        }
+        
+        // Get server type from configuration
+        const serverType = this.config?.serverType || 'lmstudio';
+        
+        // Build base config
+        const baseConfig = {
+            model: model,
             messages: messages,
-            max_tokens: request.options?.maxTokens || this.config?.maxTokens || 2048,
-            temperature: request.options?.temperature || this.config?.temperature || 0.7,
+            max_tokens: maxTokens,
+            temperature: temperature,
             stream: false
         };
+        
+        // Adapt parameters for server type
+        const adaptedConfig = this.adaptParameters(baseConfig, serverType);
+        
+        return adaptedConfig;
     }
 
     /**
@@ -698,6 +811,28 @@ class LLMService extends AbstractService {
         };
         
         return prompts[analysisType] || `Analyze the following text: "${text}"`;
+    }
+
+    /**
+     * INFRASTRUCTURE LAYER: Adapt parameters for different server types
+     * Ollama uses 'num_predict', OpenAI/LMStudio use 'max_tokens'
+     */
+    adaptParameters(config, serverType) {
+        if (!config) return {};
+        
+        const adapted = { ...config };
+        
+        // Handle max_tokens vs num_predict based on server type
+        if (serverType === 'ollama' && adapted.max_tokens) {
+            adapted.num_predict = adapted.max_tokens;
+            delete adapted.max_tokens;
+        } else if ((serverType === 'lmstudio' || serverType === 'openai') && adapted.num_predict) {
+            adapted.max_tokens = adapted.num_predict;
+            delete adapted.num_predict;
+        }
+        // For 'custom' server type, pass as-is
+        
+        return adapted;
     }
 
     /**

@@ -160,6 +160,92 @@ class BackgroundAnalysisService extends AbstractService {
                 }
             });
 
+            // Check if a commitment was detected and create commitment record
+            if (decision && decision.commitment_detected && decision.commitment_detected.has_commitment) {
+                try {
+                    const commitmentData = decision.commitment_detected.commitment;
+                    
+                    this.logger.info('Creating commitment record', 'BackgroundAnalysisService', {
+                        sessionId,
+                        userId,
+                        commitmentType: commitmentData?.commitment_type
+                    });
+
+                    // Create commitment record
+                    const commitmentId = await this.dal.commitments.createCommitment({
+                        user_id: userId,
+                        chat_id: sessionId,
+                        character_id: characterId,
+                        description: commitmentData?.description || 'No description provided',
+                        commitment_type: commitmentData?.commitment_type || 'task',
+                        context: commitmentData?.context || null,
+                        character_notes: commitmentData?.character_notes || null,
+                        due_at: commitmentData?.due_at || null,
+                        status: 'active'
+                    });
+
+                    this.logger.info('Commitment created successfully', 'BackgroundAnalysisService', {
+                        commitmentId,
+                        sessionId,
+                        userId
+                    });
+
+                    // Schedule proactive follow-up if due date is set
+                    if (commitmentData?.due_at && this.proactiveDelivery) {
+                        try {
+                            // Calculate reminder time (1 hour before due date)
+                            const dueDate = new Date(commitmentData.due_at);
+                            const reminderTime = new Date(dueDate.getTime() - (60 * 60 * 1000)); // 1 hour before
+                            const now = new Date();
+                            
+                            // Only schedule if reminder time is in the future
+                            if (reminderTime > now) {
+                                const delaySeconds = Math.floor((reminderTime.getTime() - now.getTime()) / 1000);
+                                
+                                // Schedule follow-up using ProactiveDeliveryService
+                                this.proactiveDelivery.scheduleProactiveMessage({
+                                    sessionId,
+                                    userId,
+                                    personalityId: characterId,
+                                    personalityName: character.name,
+                                    messageContent: `Just checking in about your commitment: "${commitmentData.description}". How is it going?`,
+                                    delaySeconds,
+                                    metadata: {
+                                        type: 'commitment_reminder',
+                                        commitmentId,
+                                        dueDate: commitmentData.due_at
+                                    }
+                                });
+
+                                this.logger.info('Commitment follow-up scheduled', 'BackgroundAnalysisService', {
+                                    commitmentId,
+                                    reminderTime: reminderTime.toISOString(),
+                                    delaySeconds
+                                });
+                            } else {
+                                this.logger.debug('Reminder time is in the past, not scheduling', 'BackgroundAnalysisService', {
+                                    commitmentId,
+                                    reminderTime: reminderTime.toISOString()
+                                });
+                            }
+                        } catch (scheduleError) {
+                            this.logger.error('Failed to schedule commitment follow-up', 'BackgroundAnalysisService', {
+                                commitmentId,
+                                error: scheduleError.message
+                            });
+                            // Continue processing - scheduling failure shouldn't block commitment creation
+                        }
+                    }
+                } catch (commitmentError) {
+                    this.logger.error('Failed to create commitment record', 'BackgroundAnalysisService', {
+                        sessionId,
+                        userId,
+                        error: commitmentError.message
+                    });
+                    // Continue processing - commitment creation failure shouldn't block proactive messages
+                }
+            }
+
             // Process the decision for delivery if proactive engagement is recommended
             this.logger.info('Checking proactive decision condition', 'BackgroundAnalysisService', {
                 sessionId,
@@ -219,14 +305,14 @@ class BackgroundAnalysisService extends AbstractService {
      */
     async _runLearningExtraction(sessionId, userId, characterId, userMessage, aiResponse) {
         try {
-            await this.proactiveLearning.extractPatternsFromEngagement({
+            await this.proactiveLearning.extractPatternsFromEngagements([{
                 sessionId,
                 userId,
                 personalityId: characterId,
                 userMessage,
                 agentResponse: aiResponse,
                 outcome: 'success' // Assume success for completed exchanges
-            });
+            }]);
         } catch (error) {
             this.logger.error('Learning extraction failed', 'BackgroundAnalysisService', { 
                 sessionId, 

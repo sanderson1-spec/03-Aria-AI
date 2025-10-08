@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CollapsiblePsychologySection } from './CollapsiblePsychologySection';
+import CommitmentPanel from './CommitmentPanel';
 import { useChatContext } from '../../contexts/ChatContext';
 import { useProactiveMessages } from '../../hooks/useProactiveMessages';
 import type { Message } from '../../types';
@@ -41,8 +42,16 @@ const ChatPage: React.FC = () => {
     
     console.log('📨 Handling proactive message:', message);
     
+    // Normalize timestamp to Date object if it's a string
+    const normalizedMessage = {
+      ...message,
+      timestamp: typeof message.timestamp === 'string' 
+        ? new Date(message.timestamp) 
+        : message.timestamp
+    };
+    
     // Add proactive message to current chat
-    const updatedMessages = [...currentChat.messages, message];
+    const updatedMessages = [...currentChat.messages, normalizedMessage];
     const updatedChat = { ...currentChat, messages: updatedMessages };
     
     setCurrentChat(updatedChat);
@@ -57,6 +66,42 @@ const ChatPage: React.FC = () => {
     onProactiveMessage: handleProactiveMessage,
     enabled: !!currentChat
   });
+
+  // Handle verification feedback messages
+  const handleVerificationFeedback = useCallback((verificationData: {
+    feedback: string;
+    decision: 'approved' | 'needs_revision' | 'rejected' | 'not_verifiable' | 'pending';
+    canResubmit: boolean;
+    commitmentId: string;
+    commitmentDescription: string;
+    characterName: string;
+  }) => {
+    if (!currentChat) return;
+
+    const verificationMessage: Message = {
+      id: `verification-${Date.now()}`,
+      sessionId: currentChat.id,
+      content: verificationData.feedback,
+      type: 'verification',
+      timestamp: new Date(),
+      metadata: {
+        verification: {
+          decision: verificationData.decision,
+          canResubmit: verificationData.canResubmit,
+          commitmentId: verificationData.commitmentId,
+          commitmentDescription: verificationData.commitmentDescription
+        }
+      }
+    };
+
+    const updatedMessages = [...currentChat.messages, verificationMessage];
+    const updatedChat = { ...currentChat, messages: updatedMessages };
+    
+    setCurrentChat(updatedChat);
+    setChats(prev => prev.map(chat => 
+      chat.id === currentChat.id ? updatedChat : chat
+    ));
+  }, [currentChat, setCurrentChat, setChats]);
 
   // Load characters when modal opens
   useEffect(() => {
@@ -105,7 +150,7 @@ const ChatPage: React.FC = () => {
     
     try {
       // Use fetch with streaming handling
-      const response = await fetch('http://localhost:3002/api/chat/stream', {
+      const response = await fetch('http://localhost:3001/api/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -280,42 +325,153 @@ const ChatPage: React.FC = () => {
         />
       )}
 
+      {/* Commitment Panel */}
+      {currentChat && (
+        <div className="m-4">
+          <CommitmentPanel 
+            chatId={currentChat.id} 
+            userId="user-1"
+            onVerificationFeedback={handleVerificationFeedback}
+          />
+        </div>
+      )}
+
       {/* Messages - Scrollable Area with Fixed Height */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6" style={{ maxHeight: 'calc(100vh - 300px)' }}>
         {currentChat ? (
           <>
-            {currentChat.messages.map((message) => (
-              <div key={message.id} className={`flex items-start space-x-3 ${
-                message.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''
-              }`}>
-                {/* Avatar */}
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  message.type === 'user' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'bg-gradient-to-br from-purple-500 to-pink-500 text-white'
-                }`}>
-                  {message.type === 'user' ? '👤' : '🤖'}
-                </div>
+            {currentChat.messages.map((message) => {
+              // Helper function to get verification styling
+              const getVerificationStyle = (decision: string) => {
+                switch (decision) {
+                  case 'approved':
+                    return {
+                      bg: 'bg-green-50',
+                      border: 'border-green-200',
+                      icon: '✅',
+                      iconColor: 'text-green-600'
+                    };
+                  case 'needs_revision':
+                    return {
+                      bg: 'bg-yellow-50',
+                      border: 'border-yellow-200',
+                      icon: '⚠️',
+                      iconColor: 'text-yellow-600'
+                    };
+                  case 'rejected':
+                    return {
+                      bg: 'bg-red-50',
+                      border: 'border-red-200',
+                      icon: '❌',
+                      iconColor: 'text-red-600'
+                    };
+                  case 'not_verifiable':
+                    return {
+                      bg: 'bg-gray-50',
+                      border: 'border-gray-200',
+                      icon: '🤷',
+                      iconColor: 'text-gray-600'
+                    };
+                  default:
+                    return {
+                      bg: 'bg-blue-50',
+                      border: 'border-blue-200',
+                      icon: '⏳',
+                      iconColor: 'text-blue-600'
+                    };
+                }
+              };
+
+              // Render verification message
+              if (message.type === 'verification' && message.metadata?.verification) {
+                const verificationStyle = getVerificationStyle(message.metadata.verification.decision);
                 
-                {/* Message Bubble */}
-                <div className={`max-w-xs lg:max-w-md xl:max-w-lg ${
-                  message.type === 'user' ? 'items-end' : 'items-start'
-                }`}>
-                  <div className={`px-4 py-3 rounded-2xl shadow-sm ${
-                    message.type === 'user'
-                      ? 'bg-blue-500 text-white rounded-br-md'
-                      : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md'
-                  }`}>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                return (
+                  <div key={message.id} className="flex items-start space-x-3">
+                    {/* Avatar */}
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white flex items-center justify-center flex-shrink-0">
+                      🤖
+                    </div>
+                    
+                    {/* Verification Message Bubble */}
+                    <div className="max-w-xs lg:max-w-md xl:max-w-lg">
+                      <div className={`px-4 py-3 rounded-2xl rounded-bl-md shadow-sm border ${verificationStyle.bg} ${verificationStyle.border}`}>
+                        {/* Verification Header */}
+                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
+                          <span className={`text-lg ${verificationStyle.iconColor}`}>
+                            {verificationStyle.icon}
+                          </span>
+                          <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                            Verification Feedback
+                          </span>
+                        </div>
+                        
+                        {/* Commitment Description */}
+                        {message.metadata.verification.commitmentDescription && (
+                          <div className="text-xs text-gray-600 mb-2 italic">
+                            Re: "{message.metadata.verification.commitmentDescription}"
+                          </div>
+                        )}
+                        
+                        {/* Feedback Content */}
+                        <p className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap">
+                          {message.content}
+                        </p>
+                        
+                        {/* Resubmit Prompt */}
+                        {message.metadata.verification.canResubmit && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <p className="text-xs text-gray-600 flex items-center gap-1">
+                              <span>💡</span>
+                              <span>You can revise and resubmit this commitment</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Timestamp */}
+                      <div className="text-xs text-gray-500 mt-1 text-left">
+                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
                   </div>
-                  <div className={`text-xs text-gray-500 mt-1 ${
-                    message.type === 'user' ? 'text-right' : 'text-left'
+                );
+              }
+
+              // Render regular message
+              return (
+                <div key={message.id} className={`flex items-start space-x-3 ${
+                  message.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+                }`}>
+                  {/* Avatar */}
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    message.type === 'user' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gradient-to-br from-purple-500 to-pink-500 text-white'
                   }`}>
-                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {message.type === 'user' ? '👤' : '🤖'}
+                  </div>
+                  
+                  {/* Message Bubble */}
+                  <div className={`max-w-xs lg:max-w-md xl:max-w-lg ${
+                    message.type === 'user' ? 'items-end' : 'items-start'
+                  }`}>
+                    <div className={`px-4 py-3 rounded-2xl shadow-sm ${
+                      message.type === 'user'
+                        ? 'bg-blue-500 text-white rounded-br-md'
+                        : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md'
+                    }`}>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                    </div>
+                    <div className={`text-xs text-gray-500 mt-1 ${
+                      message.type === 'user' ? 'text-right' : 'text-left'
+                    }`}>
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             
             {/* Typing Indicator */}
             {isTyping && (

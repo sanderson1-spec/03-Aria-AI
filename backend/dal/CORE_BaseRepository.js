@@ -261,6 +261,15 @@ class BaseRepository {
 
         return sanitized;
     }
+
+    /**
+     * Generate unique ID using UUID v4
+     * CLEAN ARCHITECTURE: Infrastructure utility
+     */
+    generateId() {
+        const { v4: uuidv4 } = require('uuid');
+        return uuidv4();
+    }
 }
 
 module.exports = BaseRepository; 
