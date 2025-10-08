@@ -236,6 +236,52 @@ CREATE TABLE IF NOT EXISTS psychology_frameworks (
 -- INTELLIGENCE LAYER: Proactive Engagement System
 -- ============================================================================
 
+-- ============================================================================
+-- COMMITMENTS: Character-assigned tasks and accountability tracking
+-- ============================================================================
+
+-- Commitments table for character-assigned tasks
+CREATE TABLE IF NOT EXISTS commitments (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,              -- User isolation
+    chat_id TEXT NOT NULL,              -- Chat-scoped (Maria doesn't see Bob's assignments)
+    character_id TEXT NOT NULL,         -- Which character assigned it
+    
+    -- What was assigned (free text, LLM-driven)
+    commitment_type TEXT,               -- 'homework', 'exercise', 'reading', etc. (character's framing)
+    description TEXT NOT NULL,          -- What needs to be done
+    context TEXT,                       -- Additional context from conversation
+    character_notes TEXT,               -- How character wants to follow up
+    
+    -- Timing
+    assigned_at DATETIME NOT NULL,
+    due_at DATETIME,                    -- Optional deadline
+    
+    -- Status tracking (for queries only, LLM interprets)
+    status TEXT DEFAULT 'active',       -- active, submitted, verified, completed, cancelled
+    
+    -- Submission & verification (LLM-driven)
+    submission_content TEXT,            -- What user submitted
+    submitted_at DATETIME,
+    verification_result TEXT,           -- Character's assessment
+    verification_reasoning TEXT,        -- Why character accepted/rejected
+    verified_at DATETIME,
+    
+    -- Enhanced verification workflow (v1.1.0)
+    verification_requested_at DATETIME, -- When verification was requested
+    verification_feedback TEXT,         -- User feedback on character's verification
+    verification_decision TEXT,         -- 'approved', 'needs_revision', 'rejected', 'not_verifiable'
+    revision_count INTEGER DEFAULT 0,   -- Number of times commitment was revised
+    
+    -- Metadata
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+    FOREIGN KEY (character_id) REFERENCES personalities(id) ON DELETE CASCADE
+);
+
 -- Proactive engagements (core feature)
 CREATE TABLE IF NOT EXISTS proactive_engagements (
     id TEXT PRIMARY KEY,
@@ -419,6 +465,20 @@ CREATE INDEX IF NOT EXISTS idx_evolution_user ON psychology_evolution_log(user_i
 CREATE INDEX IF NOT EXISTS idx_evolution_personality ON psychology_evolution_log(personality_id);
 CREATE INDEX IF NOT EXISTS idx_evolution_created ON psychology_evolution_log(created_at);
 
+-- Commitments indexes
+CREATE INDEX IF NOT EXISTS idx_commitments_user ON commitments(user_id);
+CREATE INDEX IF NOT EXISTS idx_commitments_chat ON commitments(chat_id);
+CREATE INDEX IF NOT EXISTS idx_commitments_character ON commitments(character_id);
+CREATE INDEX IF NOT EXISTS idx_commitments_status ON commitments(status);
+CREATE INDEX IF NOT EXISTS idx_commitments_due ON commitments(due_at);
+CREATE INDEX IF NOT EXISTS idx_commitments_active_due ON commitments(status, due_at) 
+WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_commitments_revision ON commitments(user_id, revision_count);
+CREATE INDEX IF NOT EXISTS idx_commitments_verification_requested ON commitments(verification_requested_at) 
+WHERE verification_requested_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_commitments_verification_decision ON commitments(verification_decision, user_id)
+WHERE verification_decision IS NOT NULL;
+
 -- Proactive intelligence indexes
 CREATE INDEX IF NOT EXISTS idx_proactive_engagements_user ON proactive_engagements(user_id);
 CREATE INDEX IF NOT EXISTS idx_proactive_engagements_personality ON proactive_engagements(personality_id);
@@ -582,6 +642,13 @@ CREATE TRIGGER IF NOT EXISTS update_user_last_active
         UPDATE users 
         SET last_active = CURRENT_TIMESTAMP 
         WHERE id = NEW.user_id;
+    END;
+
+-- Update commitments timestamp automatically
+CREATE TRIGGER IF NOT EXISTS update_commitments_timestamp 
+    AFTER UPDATE ON commitments
+    BEGIN
+        UPDATE commitments SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
     END;
 -- ============================================================================
 -- INITIAL DATA: Default Content for Aria AI

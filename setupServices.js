@@ -35,6 +35,7 @@ const StructuredResponseService = require('./backend/services/intelligence/CORE_
 
 // Domain Services
 const PsychologyService = require('./backend/services/domain/CORE_PsychologyService');
+const TaskVerificationService = require('./backend/services/domain/CORE_TaskVerificationService');
 const ConversationAnalyzer = require('./backend/services/domain/CORE_ConversationAnalyzer');
 const ProactiveIntelligenceService = require('./backend/services/domain/CORE_ProactiveIntelligenceService');
 const ProactiveLearningService = require('./backend/services/domain/CORE_ProactiveLearningService');
@@ -365,6 +366,11 @@ async function setupServices(config = {}) {
         // Psychology Service - Character psychology and behavior
         serviceFactory.registerService('psychology', PsychologyService, [
             'database', 'logger', 'errorHandling', 'structuredResponse'
+        ]);
+
+        // Task Verification Service - AI-driven commitment verification
+        serviceFactory.registerService('taskVerification', TaskVerificationService, [
+            'database', 'logger', 'errorHandling', 'structuredResponse', 'psychology'
         ]);
 
         // Conversation Analyzer - Conversation flow and context analysis

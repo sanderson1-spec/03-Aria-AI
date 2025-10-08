@@ -78,6 +78,7 @@ class CommitmentRoutes {
          * POST /api/commitments/:commitmentId/submit
          * Submit a commitment for verification
          * Body: { userId, submissionText }
+         * UPDATED: Now includes automatic verification via TaskVerificationService
          */
         this.router.post('/:commitmentId/submit', async (req, res) => {
             try {
@@ -119,23 +120,72 @@ class CommitmentRoutes {
                     });
                 }
 
-                if (commitment.status !== 'active') {
+                if (commitment.status !== 'active' && commitment.status !== 'needs_revision') {
                     return res.status(400).json({
                         success: false,
-                        error: 'Commitment is not active and cannot be submitted'
+                        error: `Commitment status '${commitment.status}' cannot be submitted`
                     });
                 }
 
-                // Submit commitment
-                const result = await databaseService.getDAL().commitments.submitCommitment(
+                // Submit commitment to database
+                const submittedCommitment = await databaseService.getDAL().commitments.submitCommitment(
                     commitmentId,
                     submissionText.trim()
                 );
 
+                if (!submittedCommitment) {
+                    return res.status(500).json({
+                        success: false,
+                        error: 'Failed to save submission to database'
+                    });
+                }
+
+                // Call TaskVerificationService for immediate verification
+                let verificationResult;
+                try {
+                    const verificationService = this.serviceFactory.get('taskVerification');
+                    verificationResult = await verificationService.verifySubmission(commitmentId, userId);
+                } catch (verificationError) {
+                    console.error('Verification Service Error:', verificationError);
+                    
+                    // If verification fails, mark as pending_verification
+                    try {
+                        await databaseService.getDAL().commitments.updateCommitmentStatus(
+                            commitmentId,
+                            'pending_verification',
+                            {}
+                        );
+                    } catch (updateError) {
+                        console.error('Failed to update status to pending_verification:', updateError);
+                    }
+
+                    // Return submission success but verification failure
+                    return res.json({
+                        success: true,
+                        message: 'Commitment submitted successfully, but verification is pending',
+                        verification: {
+                            decision: 'pending',
+                            feedback: 'Your submission has been saved. Verification will be completed shortly.',
+                            canResubmit: false
+                        },
+                        data: submittedCommitment
+                    });
+                }
+
+                // Return successful verification result
                 res.json({
                     success: true,
-                    data: result,
-                    message: 'Commitment submitted successfully'
+                    message: 'Commitment submitted and verified',
+                    verification: {
+                        decision: verificationResult.verification.decision,
+                        feedback: verificationResult.verification.feedback,
+                        canResubmit: verificationResult.verification.decision === 'needs_revision',
+                        isVerifiable: verificationResult.verification.isVerifiable,
+                        timingAssessment: verificationResult.verification.timingAssessment,
+                        qualityAssessment: verificationResult.verification.qualityAssessment
+                    },
+                    data: verificationResult.commitment,
+                    character: verificationResult.character
                 });
 
             } catch (error) {
@@ -143,6 +193,203 @@ class CommitmentRoutes {
                 res.status(500).json({
                     success: false,
                     error: 'Failed to submit commitment',
+                    details: error.message
+                });
+            }
+        });
+
+        /**
+         * POST /api/commitments/:commitmentId/resubmit
+         * Resubmit a commitment after 'needs_revision' feedback
+         * Body: { userId, submissionText }
+         */
+        this.router.post('/:commitmentId/resubmit', async (req, res) => {
+            try {
+                const { commitmentId } = req.params;
+                const { userId, submissionText } = req.body;
+
+                if (!userId) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Missing required field: userId'
+                    });
+                }
+
+                if (!submissionText || !submissionText.trim()) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Missing required field: submissionText'
+                    });
+                }
+
+                const databaseService = this.serviceFactory.get('database');
+                
+                // Verify commitment belongs to user (user isolation)
+                const commitment = await databaseService.getDAL().commitments.findById(
+                    commitmentId
+                );
+
+                if (!commitment) {
+                    return res.status(404).json({
+                        success: false,
+                        error: 'Commitment not found'
+                    });
+                }
+
+                if (commitment.user_id !== userId) {
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Access denied: This commitment does not belong to you'
+                    });
+                }
+
+                if (commitment.status !== 'needs_revision') {
+                    return res.status(400).json({
+                        success: false,
+                        error: `Commitment must have 'needs_revision' status to resubmit. Current status: '${commitment.status}'`
+                    });
+                }
+
+                // Update submission with new content and increment revision_count
+                const currentRevisionCount = commitment.revision_count || 0;
+                const dal = databaseService.getDAL();
+                
+                await dal.commitments.update(
+                    {
+                        submission_content: submissionText.trim(),
+                        submitted_at: new Date().toISOString(),
+                        status: 'submitted',
+                        verification_requested_at: new Date().toISOString(),
+                        revision_count: currentRevisionCount + 1,
+                        updated_at: new Date().toISOString()
+                    },
+                    { id: commitmentId }
+                );
+
+                // Call TaskVerificationService for re-verification
+                let verificationResult;
+                try {
+                    const verificationService = this.serviceFactory.get('taskVerification');
+                    verificationResult = await verificationService.verifySubmission(commitmentId, userId);
+                } catch (verificationError) {
+                    console.error('Resubmit Verification Error:', verificationError);
+                    
+                    // Return submission success but verification failure
+                    return res.json({
+                        success: true,
+                        message: 'Commitment resubmitted successfully, but verification is pending',
+                        verification: {
+                            decision: 'pending',
+                            feedback: 'Your resubmission has been saved. Verification will be completed shortly.',
+                            canResubmit: false
+                        },
+                        revisionCount: currentRevisionCount + 1
+                    });
+                }
+
+                // Return successful verification result
+                res.json({
+                    success: true,
+                    message: 'Commitment resubmitted and verified',
+                    verification: {
+                        decision: verificationResult.verification.decision,
+                        feedback: verificationResult.verification.feedback,
+                        canResubmit: verificationResult.verification.decision === 'needs_revision',
+                        isVerifiable: verificationResult.verification.isVerifiable,
+                        timingAssessment: verificationResult.verification.timingAssessment,
+                        qualityAssessment: verificationResult.verification.qualityAssessment
+                    },
+                    data: verificationResult.commitment,
+                    character: verificationResult.character,
+                    revisionCount: verificationResult.commitment.revision_count
+                });
+
+            } catch (error) {
+                console.error('Resubmit Commitment API Error:', error);
+                res.status(500).json({
+                    success: false,
+                    error: 'Failed to resubmit commitment',
+                    details: error.message
+                });
+            }
+        });
+
+        /**
+         * GET /api/commitments/:commitmentId/verification-history
+         * Get verification history for a commitment
+         * Query params: userId
+         */
+        this.router.get('/:commitmentId/verification-history', async (req, res) => {
+            try {
+                const { commitmentId } = req.params;
+                const { userId } = req.query;
+
+                if (!userId) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Missing required parameter: userId'
+                    });
+                }
+
+                const databaseService = this.serviceFactory.get('database');
+                
+                // Verify commitment belongs to user (user isolation)
+                const commitment = await databaseService.getDAL().commitments.getCommitmentWithContext(
+                    commitmentId
+                );
+
+                if (!commitment) {
+                    return res.status(404).json({
+                        success: false,
+                        error: 'Commitment not found'
+                    });
+                }
+
+                if (commitment.user_id !== userId) {
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Access denied: This commitment does not belong to you'
+                    });
+                }
+
+                // Build verification history response
+                const history = {
+                    commitmentId: commitment.id,
+                    description: commitment.description,
+                    assignedAt: commitment.assigned_at,
+                    dueAt: commitment.due_at,
+                    status: commitment.status,
+                    revisionCount: commitment.revision_count || 0,
+                    character: {
+                        id: commitment.character?.id,
+                        name: commitment.character?.name
+                    },
+                    currentSubmission: {
+                        content: commitment.submission_content,
+                        submittedAt: commitment.submitted_at,
+                        verificationRequestedAt: commitment.verification_requested_at
+                    },
+                    verification: {
+                        decision: commitment.verification_decision,
+                        result: commitment.verification_result,
+                        reasoning: commitment.verification_reasoning,
+                        verifiedAt: commitment.verified_at,
+                        feedback: commitment.verification_feedback
+                    },
+                    submissionHistory: commitment.submissionHistory || [],
+                    hasRevisions: commitment.hasRevisions || false
+                };
+
+                res.json({
+                    success: true,
+                    data: history
+                });
+
+            } catch (error) {
+                console.error('Get Verification History API Error:', error);
+                res.status(500).json({
+                    success: false,
+                    error: 'Failed to get verification history',
                     details: error.message
                 });
             }
