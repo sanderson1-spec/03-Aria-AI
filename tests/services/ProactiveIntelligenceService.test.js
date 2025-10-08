@@ -117,4 +117,207 @@ describe('ProactiveIntelligenceService', () => {
             expect(proactiveService.config.maxTokens).toBeDefined();
         });
     });
+
+    describe('Commitment Confidence Scoring', () => {
+        beforeEach(async () => {
+            await proactiveService.initialize();
+        });
+
+        test('should detect high-confidence commitment (0.9)', async () => {
+            const mockContext = {
+                userMessage: 'I want to learn Spanish',
+                agentResponse: 'Great! Write 5 sentences in Spanish and submit by 8pm.',
+                conversationHistory: [],
+                sessionContext: {
+                    sessionId: 'session-123',
+                    userId: 'user-123',
+                    personalityId: 'char-123',
+                    personalityName: 'Aria'
+                }
+            };
+
+            // Mock high-confidence commitment response
+            mockDeps.structuredResponse.generateStructuredResponse.mockResolvedValue({
+                has_commitment: true,
+                confidence: 0.9,
+                commitment: {
+                    commitment_type: 'homework',
+                    description: 'Write 5 sentences in Spanish and submit by 8pm',
+                    character_notes: 'Will review the sentences',
+                    verification_needed: true,
+                    due_at: null
+                }
+            });
+
+            const result = await proactiveService.detectCommitment(mockContext);
+
+            expect(result).toBeDefined();
+            expect(result.has_commitment).toBe(true);
+            expect(result.confidence).toBeGreaterThanOrEqual(0.9);
+            expect(result.commitment).toBeDefined();
+            expect(result.commitment.commitment_type).toBe('homework');
+        });
+
+        test('should detect medium-confidence commitment (0.7)', async () => {
+            const mockContext = {
+                userMessage: 'I should exercise more',
+                agentResponse: 'Yes! Try doing 20 push-ups today.',
+                conversationHistory: [],
+                sessionContext: {
+                    sessionId: 'session-123',
+                    userId: 'user-123',
+                    personalityId: 'char-123',
+                    personalityName: 'Aria'
+                }
+            };
+
+            // Mock medium-confidence commitment response
+            mockDeps.structuredResponse.generateStructuredResponse.mockResolvedValue({
+                has_commitment: true,
+                confidence: 0.7,
+                commitment: {
+                    commitment_type: 'task',
+                    description: 'Try doing 20 push-ups today',
+                    character_notes: 'Suggested exercise',
+                    verification_needed: false,
+                    due_at: null
+                }
+            });
+
+            const result = await proactiveService.detectCommitment(mockContext);
+
+            expect(result).toBeDefined();
+            expect(result.has_commitment).toBe(true);
+            expect(result.confidence).toBeLessThan(0.9);
+            expect(result.confidence).toBeGreaterThanOrEqual(0.7);
+        });
+
+        test('should not flag casual question "How was your day?" as commitment', async () => {
+            const mockContext = {
+                userMessage: 'I had a busy day',
+                agentResponse: 'So tell me, how was your day?',
+                conversationHistory: [],
+                sessionContext: {
+                    sessionId: 'session-123',
+                    userId: 'user-123',
+                    personalityId: 'char-123',
+                    personalityName: 'Aria'
+                }
+            };
+
+            // Mock low-confidence or no commitment response
+            mockDeps.structuredResponse.generateStructuredResponse.mockResolvedValue({
+                has_commitment: false,
+                confidence: 0.2,
+                commitment: null
+            });
+
+            const result = await proactiveService.detectCommitment(mockContext);
+
+            expect(result).toBeDefined();
+            // Either no commitment OR very low confidence
+            if (result.has_commitment) {
+                expect(result.confidence).toBeLessThan(0.5);
+            } else {
+                expect(result.has_commitment).toBe(false);
+            }
+        });
+
+        test('should not flag casual question "Tell me about yourself" as commitment', async () => {
+            const mockContext = {
+                userMessage: 'I like to code',
+                agentResponse: 'That\'s interesting! Tell me about yourself.',
+                conversationHistory: [],
+                sessionContext: {
+                    sessionId: 'session-123',
+                    userId: 'user-123',
+                    personalityId: 'char-123',
+                    personalityName: 'Aria'
+                }
+            };
+
+            // Mock low-confidence or no commitment response
+            mockDeps.structuredResponse.generateStructuredResponse.mockResolvedValue({
+                has_commitment: false,
+                confidence: 0.1,
+                commitment: null
+            });
+
+            const result = await proactiveService.detectCommitment(mockContext);
+
+            expect(result).toBeDefined();
+            // Either no commitment OR very low confidence
+            if (result.has_commitment) {
+                expect(result.confidence).toBeLessThan(0.5);
+            } else {
+                expect(result.has_commitment).toBe(false);
+            }
+        });
+
+        test('should not flag casual question "What are you up to?" as commitment', async () => {
+            const mockContext = {
+                userMessage: 'Just relaxing',
+                agentResponse: 'Nice! What are you up to?',
+                conversationHistory: [],
+                sessionContext: {
+                    sessionId: 'session-123',
+                    userId: 'user-123',
+                    personalityId: 'char-123',
+                    personalityName: 'Aria'
+                }
+            };
+
+            // Mock low-confidence or no commitment response
+            mockDeps.structuredResponse.generateStructuredResponse.mockResolvedValue({
+                has_commitment: false,
+                confidence: 0.15,
+                commitment: null
+            });
+
+            const result = await proactiveService.detectCommitment(mockContext);
+
+            expect(result).toBeDefined();
+            // Either no commitment OR very low confidence
+            if (result.has_commitment) {
+                expect(result.confidence).toBeLessThan(0.5);
+            } else {
+                expect(result.has_commitment).toBe(false);
+            }
+        });
+
+        test('should include confidence score in all commitment detection responses', async () => {
+            const mockContext = {
+                userMessage: 'I need to study',
+                agentResponse: 'Read chapter 3 and we\'ll discuss it tomorrow.',
+                conversationHistory: [],
+                sessionContext: {
+                    sessionId: 'session-123',
+                    userId: 'user-123',
+                    personalityId: 'char-123',
+                    personalityName: 'Aria'
+                }
+            };
+
+            // Mock commitment response with confidence
+            mockDeps.structuredResponse.generateStructuredResponse.mockResolvedValue({
+                has_commitment: true,
+                confidence: 0.85,
+                commitment: {
+                    commitment_type: 'homework',
+                    description: 'Read chapter 3',
+                    character_notes: 'Will discuss tomorrow',
+                    verification_needed: true,
+                    due_at: null
+                }
+            });
+
+            const result = await proactiveService.detectCommitment(mockContext);
+
+            expect(result).toBeDefined();
+            expect(result.confidence).toBeDefined();
+            expect(typeof result.confidence).toBe('number');
+            expect(result.confidence).toBeGreaterThanOrEqual(0.0);
+            expect(result.confidence).toBeLessThanOrEqual(1.0);
+        });
+    });
 });
