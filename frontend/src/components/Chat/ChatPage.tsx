@@ -4,12 +4,14 @@ import CommitmentPanel from './CommitmentPanel';
 import EventsPanel from './EventsPanel';
 import { useChatContext } from '../../contexts/ChatContext';
 import { useProactiveMessages } from '../../hooks/useProactiveMessages';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Message } from '../../types';
 import { formatChatTimestamp } from '../../utils/dateFormatter';
 import ReactMarkdown from 'react-markdown';
 import { API_BASE_URL } from '../../config/api';
 
 const ChatPage: React.FC = () => {
+  const { user } = useAuth();
   const {
     currentChat,
     setCurrentChat,
@@ -162,7 +164,7 @@ const ChatPage: React.FC = () => {
         body: JSON.stringify({
           message: messageContent,
           sessionId: currentChat.id,
-          userId: 'user-1',
+          userId: user?.id || 'default-user',
           characterId: currentChat.characterId
         })
       });
@@ -337,7 +339,7 @@ const ChatPage: React.FC = () => {
               <h3 className="font-semibold mb-2 text-sm md:text-base">Tasks</h3>
               <CommitmentPanel 
                 chatId={currentChat.id} 
-                userId="user-1"
+                userId={user?.id || 'default-user'}
                 onVerificationFeedback={handleVerificationFeedback}
               />
             </div>
@@ -345,7 +347,7 @@ const ChatPage: React.FC = () => {
               <h3 className="font-semibold mb-2 text-sm md:text-base">Events</h3>
               <EventsPanel 
                 chatId={currentChat.id} 
-                userId="user-1"
+                userId={user?.id || 'default-user'}
               />
             </div>
           </div>

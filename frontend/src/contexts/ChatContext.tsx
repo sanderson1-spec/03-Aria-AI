@@ -258,14 +258,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   };
 
   const loadCharacters = async () => {
-    if (!sessionToken) {
-      console.log('No session token, skipping characters load');
+    if (!sessionToken || !user) {
+      console.log('No session token or user, skipping characters load');
       return;
     }
     
     setIsLoadingCharacters(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/characters`, {
+      const response = await fetch(`${API_BASE_URL}/api/characters?userId=${user.id}`, {
         headers: {
           'Authorization': `Bearer ${sessionToken}`
         }

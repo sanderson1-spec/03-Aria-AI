@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { formatDate } from '../../utils/dateFormatter';
 import { API_BASE_URL } from '../../config/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Character {
   id: string;
@@ -30,8 +31,8 @@ interface LLMModel {
 
 
 const CharactersPage: React.FC = () => {
-  // TODO: Get userId from auth context once authentication is implemented
-  const userId = "default-user";
+  const { user } = useAuth();
+  const userId = user?.id || "default-user"; // Fallback to default-user if not authenticated
   
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
