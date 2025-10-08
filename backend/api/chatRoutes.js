@@ -1,16 +1,115 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const DateTimeUtils = require('../utils/datetime_utils');
+const { createAuthMiddleware } = require('./authMiddleware');
 
 class ChatRoutes {
     constructor(serviceFactory) {
         this.router = express.Router();
         this.serviceFactory = serviceFactory;
+        this.authMiddleware = createAuthMiddleware(serviceFactory);
         this.setupRoutes();
     }
 
     setupRoutes() {
         // CORS is handled by main server middleware
+
+        // Get all chats for a user (protected)
+        this.router.get('/user/:userId/chats', this.authMiddleware, async (req, res) => {
+            try {
+                const { userId } = req.params;
+                const { page = 1, pageSize = 50 } = req.query;
+
+                const databaseService = this.serviceFactory.get('database');
+                const result = await databaseService.getDAL().chats.getUserChats(userId, parseInt(page), parseInt(pageSize));
+
+                res.json({
+                    success: true,
+                    data: result.chats,
+                    pagination: result.pagination
+                });
+
+            } catch (error) {
+                console.error('Get User Chats API Error:', error);
+                res.status(500).json({ 
+                    error: 'Failed to get user chats', 
+                    details: error.message 
+                });
+            }
+        });
+
+        // Get recent chats for a user (protected)
+        this.router.get('/user/:userId/chats/recent', this.authMiddleware, async (req, res) => {
+            try {
+                const { userId } = req.params;
+                const { limit = 10 } = req.query;
+
+                const databaseService = this.serviceFactory.get('database');
+                const chats = await databaseService.getDAL().chats.getRecentUserChats(userId, parseInt(limit));
+
+                res.json({
+                    success: true,
+                    data: chats
+                });
+
+            } catch (error) {
+                console.error('Get Recent User Chats API Error:', error);
+                res.status(500).json({ 
+                    error: 'Failed to get recent user chats', 
+                    details: error.message 
+                });
+            }
+        });
+
+        // Create or update a chat (protected)
+        this.router.post('/user/:userId/chats', this.authMiddleware, async (req, res) => {
+            try {
+                const { userId } = req.params;
+                const { chatId, title, personalityId, metadata } = req.body;
+
+                if (!personalityId) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        error: 'personalityId is required' 
+                    });
+                }
+
+                const databaseService = this.serviceFactory.get('database');
+                
+                // Check if chat already exists
+                if (chatId) {
+                    const existingChat = await databaseService.getDAL().chats.getUserChat(userId, chatId);
+                    if (existingChat) {
+                        return res.json({
+                            success: true,
+                            data: existingChat,
+                            message: 'Chat already exists'
+                        });
+                    }
+                }
+
+                // Create new chat
+                const chat = await databaseService.getDAL().chats.createChat(userId, {
+                    id: chatId,
+                    title: title || `Chat with ${personalityId}`,
+                    personality_id: personalityId,
+                    metadata: metadata || {}
+                });
+
+                res.status(201).json({
+                    success: true,
+                    data: chat,
+                    message: 'Chat created successfully'
+                });
+
+            } catch (error) {
+                console.error('Create Chat API Error:', error);
+                res.status(500).json({ 
+                    error: 'Failed to create chat', 
+                    details: error.message 
+                });
+            }
+        });
 
         // Send a chat message (non-streaming)
         this.router.post('/message', async (req, res) => {

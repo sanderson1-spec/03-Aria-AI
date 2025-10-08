@@ -29,6 +29,7 @@ const MessageDeliveryService = require('./backend/services/infrastructure/CORE_M
 const SchedulingService = require('./backend/services/infrastructure/CORE_SchedulingService');
 const LLMConfigService = require('./backend/services/infrastructure/CORE_LLMConfigService');
 const EventSchedulerService = require('./backend/services/infrastructure/CORE_EventSchedulerService');
+const AuthService = require('./backend/services/infrastructure/AuthService');
 
 // Intelligence Services  
 const LLMService = require('./backend/services/intelligence/CORE_LLMService');
@@ -58,6 +59,7 @@ const ConfigurationRepository = require('./backend/dal/repositories/CORE_Configu
 const SchemaRepository = require('./backend/dal/repositories/CORE_SchemaRepository');
 const CommitmentsRepository = require('./backend/dal/repositories/CORE_CommitmentsRepository');
 const EventsRepository = require('./backend/dal/repositories/CORE_EventsRepository');
+const AuthRepository = require('./backend/dal/repositories/AuthRepository');
 
 /**
  * Database Service - Infrastructure Layer
@@ -148,6 +150,7 @@ class DatabaseService {
             // Core repositories
             { name: 'users', class: UserRepository, table: 'users' },
             { name: 'userSessions', class: UserSessionRepository, table: 'user_sessions' },
+            { name: 'auth', class: AuthRepository, table: 'users' }, // Auth repository uses users table
             { name: 'chats', class: ChatRepository, table: 'chats' },
             { name: 'conversations', class: ConversationRepository, table: 'conversation_logs' },
             { name: 'personalities', class: PersonalityRepository, table: 'personalities' },
@@ -210,6 +213,7 @@ class DatabaseService {
             // Repository access - All tables covered
             users: this.repositories.get('users'),
             userSessions: this.repositories.get('userSessions'),
+            auth: this.repositories.get('auth'),
             chats: this.repositories.get('chats'),
             conversations: this.repositories.get('conversations'),
             personalities: this.repositories.get('personalities'),
@@ -335,6 +339,13 @@ async function setupServices(config = {}) {
             'logger',
             'errorHandling',
             'configuration'
+        ]);
+
+        // Auth Service - User authentication and session management
+        serviceFactory.registerService('auth', AuthService, [
+            'database',
+            'logger',
+            'errorHandling'
         ]);
 
         // ===== INTELLIGENCE LAYER =====
