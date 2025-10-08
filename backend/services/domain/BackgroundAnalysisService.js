@@ -26,6 +26,7 @@ class BackgroundAnalysisService extends AbstractService {
         this.proactiveDelivery = null;
         this.proactiveLearning = null;
         this.errorHandler = null;
+        this.configuration = null;
     }
 
     /**
@@ -52,6 +53,7 @@ class BackgroundAnalysisService extends AbstractService {
             this.proactiveDelivery = this.dependencies.proactiveDelivery;
             this.proactiveLearning = this.dependencies.proactiveLearning;
             this.errorHandler = this.dependencies.errorHandling;
+            this.configuration = this.dependencies.configuration;
             
             // Get DAL from database service (CORE pattern)
             if (!this.database) {
@@ -164,77 +166,97 @@ class BackgroundAnalysisService extends AbstractService {
             if (decision && decision.commitment_detected && decision.commitment_detected.has_commitment) {
                 try {
                     const commitmentData = decision.commitment_detected.commitment;
+                    const confidence = decision.commitment_detected.confidence || 0.0;
                     
-                    this.logger.info('Creating commitment record', 'BackgroundAnalysisService', {
-                        sessionId,
-                        userId,
-                        commitmentType: commitmentData?.commitment_type
-                    });
+                    // Get confidence threshold from configuration (default 0.8)
+                    const confidenceThreshold = this.configuration 
+                        ? this.configuration.get('commitment_confidence_threshold', 0.8)
+                        : 0.8;
+                    
+                    // Only create commitment if confidence exceeds threshold
+                    if (confidence > confidenceThreshold) {
+                        this.logger.info('Creating commitment record', 'BackgroundAnalysisService', {
+                            sessionId,
+                            userId,
+                            commitmentType: commitmentData?.commitment_type,
+                            confidence: confidence,
+                            threshold: confidenceThreshold
+                        });
 
-                    // Create commitment record
-                    const commitmentId = await this.dal.commitments.createCommitment({
-                        user_id: userId,
-                        chat_id: sessionId,
-                        character_id: characterId,
-                        description: commitmentData?.description || 'No description provided',
-                        commitment_type: commitmentData?.commitment_type || 'task',
-                        context: commitmentData?.context || null,
-                        character_notes: commitmentData?.character_notes || null,
-                        due_at: commitmentData?.due_at || null,
-                        status: 'active'
-                    });
+                        // Create commitment record
+                        const commitmentId = await this.dal.commitments.createCommitment({
+                            user_id: userId,
+                            chat_id: sessionId,
+                            character_id: characterId,
+                            description: commitmentData?.description || 'No description provided',
+                            commitment_type: commitmentData?.commitment_type || 'task',
+                            context: commitmentData?.context || null,
+                            character_notes: commitmentData?.character_notes || null,
+                            due_at: commitmentData?.due_at || null,
+                            status: 'active'
+                        });
 
-                    this.logger.info('Commitment created successfully', 'BackgroundAnalysisService', {
-                        commitmentId,
-                        sessionId,
-                        userId
-                    });
+                        this.logger.info('Commitment created successfully', 'BackgroundAnalysisService', {
+                            commitmentId,
+                            sessionId,
+                            userId
+                        });
 
-                    // Schedule proactive follow-up if due date is set
-                    if (commitmentData?.due_at && this.proactiveDelivery) {
-                        try {
-                            // Calculate reminder time (1 hour before due date)
-                            const dueDate = new Date(commitmentData.due_at);
-                            const reminderTime = new Date(dueDate.getTime() - (60 * 60 * 1000)); // 1 hour before
-                            const now = new Date();
-                            
-                            // Only schedule if reminder time is in the future
-                            if (reminderTime > now) {
-                                const delaySeconds = Math.floor((reminderTime.getTime() - now.getTime()) / 1000);
+                        // Schedule proactive follow-up if due date is set
+                        if (commitmentData?.due_at && this.proactiveDelivery) {
+                            try {
+                                // Calculate reminder time (1 hour before due date)
+                                const dueDate = new Date(commitmentData.due_at);
+                                const reminderTime = new Date(dueDate.getTime() - (60 * 60 * 1000)); // 1 hour before
+                                const now = new Date();
                                 
-                                // Schedule follow-up using ProactiveDeliveryService
-                                this.proactiveDelivery.scheduleProactiveMessage({
-                                    sessionId,
-                                    userId,
-                                    personalityId: characterId,
-                                    personalityName: character.name,
-                                    messageContent: `Just checking in about your commitment: "${commitmentData.description}". How is it going?`,
-                                    delaySeconds,
-                                    metadata: {
-                                        type: 'commitment_reminder',
-                                        commitmentId,
-                                        dueDate: commitmentData.due_at
-                                    }
-                                });
+                                // Only schedule if reminder time is in the future
+                                if (reminderTime > now) {
+                                    const delaySeconds = Math.floor((reminderTime.getTime() - now.getTime()) / 1000);
+                                    
+                                    // Schedule follow-up using ProactiveDeliveryService
+                                    this.proactiveDelivery.scheduleProactiveMessage({
+                                        sessionId,
+                                        userId,
+                                        personalityId: characterId,
+                                        personalityName: character.name,
+                                        messageContent: `Just checking in about your commitment: "${commitmentData.description}". How is it going?`,
+                                        delaySeconds,
+                                        metadata: {
+                                            type: 'commitment_reminder',
+                                            commitmentId,
+                                            dueDate: commitmentData.due_at
+                                        }
+                                    });
 
-                                this.logger.info('Commitment follow-up scheduled', 'BackgroundAnalysisService', {
+                                    this.logger.info('Commitment follow-up scheduled', 'BackgroundAnalysisService', {
+                                        commitmentId,
+                                        reminderTime: reminderTime.toISOString(),
+                                        delaySeconds
+                                    });
+                                } else {
+                                    this.logger.debug('Reminder time is in the past, not scheduling', 'BackgroundAnalysisService', {
+                                        commitmentId,
+                                        reminderTime: reminderTime.toISOString()
+                                    });
+                                }
+                            } catch (scheduleError) {
+                                this.logger.error('Failed to schedule commitment follow-up', 'BackgroundAnalysisService', {
                                     commitmentId,
-                                    reminderTime: reminderTime.toISOString(),
-                                    delaySeconds
+                                    error: scheduleError.message
                                 });
-                            } else {
-                                this.logger.debug('Reminder time is in the past, not scheduling', 'BackgroundAnalysisService', {
-                                    commitmentId,
-                                    reminderTime: reminderTime.toISOString()
-                                });
+                                // Continue processing - scheduling failure shouldn't block commitment creation
                             }
-                        } catch (scheduleError) {
-                            this.logger.error('Failed to schedule commitment follow-up', 'BackgroundAnalysisService', {
-                                commitmentId,
-                                error: scheduleError.message
-                            });
-                            // Continue processing - scheduling failure shouldn't block commitment creation
                         }
+                    } else {
+                        // Log low-confidence detection for monitoring
+                        this.logger.info('Low-confidence commitment not created', 'BackgroundAnalysisService', {
+                            sessionId,
+                            userId,
+                            confidence: confidence,
+                            threshold: confidenceThreshold,
+                            description: commitmentData?.description
+                        });
                     }
                 } catch (commitmentError) {
                     this.logger.error('Failed to create commitment record', 'BackgroundAnalysisService', {

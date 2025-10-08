@@ -617,7 +617,32 @@ MOST RECENT EXCHANGE:
 User: "${userMessage}"
 Character: "${agentResponse}"
 
-WHAT COUNTS AS A COMMITMENT (be VERY sensitive - flag even hints):
+CRITICAL: Only flag as commitment if BOTH conditions are met:
+1. Character explicitly assigns something with expectation of completion
+2. There's a deliverable, deadline, or verification expectation
+
+EXAMPLES OF REAL COMMITMENTS (flag these):
+✅ "Write 5 sentences in Spanish and submit by 8pm"
+✅ "Complete this workout and log your results"
+✅ "Read chapter 3 and we'll discuss it tomorrow"
+✅ "Do 20 push-ups and tell me when you're done"
+✅ "Practice guitar for 30 minutes today"
+
+EXAMPLES OF CASUAL CONVERSATION (DO NOT flag these):
+❌ "So tell me, how was your day?" (rhetorical question)
+❌ "What are you up to?" (casual inquiry)
+❌ "How are you feeling?" (checking in)
+❌ "Tell me about yourself" (getting to know you)
+❌ "What did you think of that?" (seeking opinion)
+❌ "How did it go?" (follow-up question)
+
+KEY DISTINCTION:
+- Real commitment: Character expects user to DO something and REPORT back
+- Casual conversation: Character is asking to HEAR about something that already happened or is ongoing
+
+If you're unsure, default to NOT flagging as commitment (better to miss edge cases than create false positives).
+
+WHAT COUNTS AS A COMMITMENT (be precise):
 
 1. **Explicit Assignments:**
    - "Do this exercise", "Try this technique", "Practice this"
@@ -645,7 +670,7 @@ WHAT COUNTS AS A COMMITMENT (be VERY sensitive - flag even hints):
    - "By tomorrow", "Within the week", "Next time we talk"
 
 DETECTION RULES:
-- Be HIGHLY SENSITIVE - if there's even a hint of assignment, flag it
+- Must have BOTH explicit assignment AND expectation of completion/reporting
 - Even gentle suggestions can be commitments if character expects follow-up
 - "Let me know" = commitment (user should report back)
 - Any form of homework, task, or action item = commitment
@@ -659,6 +684,13 @@ IMPORTANT:
 - verification_needed: true if character expects proof or detailed report
 
 Analyze ONLY the character's most recent response for commitments they assigned.
+
+Respond with JSON including confidence score (0.0-1.0):
+{
+  "has_commitment": boolean,
+  "confidence": 0.0-1.0,
+  "commitment": {...}
+}
 
 Respond with complete JSON following the schema.`;
     }

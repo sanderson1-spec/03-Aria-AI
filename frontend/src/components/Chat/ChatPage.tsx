@@ -4,12 +4,14 @@ import CommitmentPanel from './CommitmentPanel';
 import EventsPanel from './EventsPanel';
 import { useChatContext } from '../../contexts/ChatContext';
 import { useProactiveMessages } from '../../hooks/useProactiveMessages';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Message } from '../../types';
 import { formatChatTimestamp } from '../../utils/dateFormatter';
 import ReactMarkdown from 'react-markdown';
 import { API_BASE_URL } from '../../config/api';
 
 const ChatPage: React.FC = () => {
+  const { user } = useAuth();
   const {
     currentChat,
     setCurrentChat,
@@ -162,7 +164,7 @@ const ChatPage: React.FC = () => {
         body: JSON.stringify({
           message: messageContent,
           sessionId: currentChat.id,
-          userId: 'user-1',
+          userId: user?.id || 'default-user',
           characterId: currentChat.characterId
         })
       });
@@ -337,7 +339,7 @@ const ChatPage: React.FC = () => {
               <h3 className="font-semibold mb-2 text-sm md:text-base">Tasks</h3>
               <CommitmentPanel 
                 chatId={currentChat.id} 
-                userId="user-1"
+                userId={user?.id || 'default-user'}
                 onVerificationFeedback={handleVerificationFeedback}
               />
             </div>
@@ -345,7 +347,7 @@ const ChatPage: React.FC = () => {
               <h3 className="font-semibold mb-2 text-sm md:text-base">Events</h3>
               <EventsPanel 
                 chatId={currentChat.id} 
-                userId="user-1"
+                userId={user?.id || 'default-user'}
               />
             </div>
           </div>
@@ -516,22 +518,6 @@ const ChatPage: React.FC = () => {
                 </div>
               );
             })}
-            
-            {/* Typing Indicator */}
-            {isTyping && (
-              <div className="flex items-start space-x-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white flex items-center justify-center flex-shrink-0">
-                  🤖
-                </div>
-                <div className="bg-white border border-gray-200 px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></div>
-                  </div>
-                </div>
-              </div>
-            )}
           </>
         ) : (
           /* Empty State */

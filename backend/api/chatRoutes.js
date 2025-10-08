@@ -144,7 +144,21 @@ class ChatRoutes {
         // Send a chat message (non-streaming)
         this.router.post('/message', async (req, res) => {
             try {
-                const { message, sessionId, userId = 'default-user', characterId = 'aria' } = req.body;
+                const { message, sessionId, userId, characterId } = req.body;
+                
+                if (!userId) {
+                    return res.status(400).json({ 
+                        error: 'userId is required',
+                        details: 'Provide userId in request body'
+                    });
+                }
+                
+                if (!characterId) {
+                    return res.status(400).json({ 
+                        error: 'characterId is required',
+                        details: 'Provide characterId in request body'
+                    });
+                }
 
                 if (!message || !message.trim()) {
                     return res.status(400).json({ error: 'Message is required' });
@@ -304,7 +318,21 @@ Stay in character as ${character.name}. You have complete awareness of all this 
         // Send a chat message with streaming (OPTIMIZED FOR FAST USER RESPONSE)
         this.router.post('/stream', async (req, res) => {
             try {
-                const { message, sessionId, userId = 'default-user', characterId = 'aria' } = req.body;
+                const { message, sessionId, userId, characterId } = req.body;
+                
+                if (!userId) {
+                    return res.status(400).json({ 
+                        error: 'userId is required',
+                        details: 'Provide userId in request body'
+                    });
+                }
+                
+                if (!characterId) {
+                    return res.status(400).json({ 
+                        error: 'characterId is required',
+                        details: 'Provide characterId in request body'
+                    });
+                }
 
                 if (!message || !message.trim()) {
                     return res.status(400).json({ error: 'Message is required' });
@@ -462,7 +490,10 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
         this.router.get('/history/:sessionId', async (req, res) => {
             try {
                 const { sessionId } = req.params;
-                const { userId = 'default-user' } = req.query;
+                const { userId } = req.query;
+                
+                // Note: userId is optional for history endpoint for backwards compatibility
+                // but should be provided for proper user isolation
 
                 const databaseService = this.serviceFactory.get('database');
                 const messages = await databaseService.getDAL().conversations.getSessionHistory(sessionId, 50, 0);

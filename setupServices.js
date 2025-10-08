@@ -423,7 +423,7 @@ async function setupServices(config = {}) {
         // Background Analysis Service - Handles all post-message background processing
         serviceFactory.registerService('backgroundAnalysis', BackgroundAnalysisService, [
             'database', 'logger', 'psychology', 'conversationAnalyzer', 'proactiveIntelligence', 
-            'proactiveDelivery', 'proactiveLearning'
+            'proactiveDelivery', 'proactiveLearning', 'configuration'
         ]);
 
         // Context Builder Service - Builds unified context for LLM conversations
