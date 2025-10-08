@@ -224,8 +224,7 @@ class DateTimeUtils {
             month: 'long', 
             day: 'numeric',
             hour: '2-digit',
-            minute: '2-digit',
-            timeZoneName: 'short'
+            minute: '2-digit'
         })}
 Current UTC time: ${date.toISOString()}
 Current timestamp: ${timestamp}
@@ -388,8 +387,6 @@ IMPORTANT: Use the current timestamp (${timestamp}) for all relative time calcul
         if (includeTime) {
             options.hour = '2-digit';
             options.minute = '2-digit';
-            // Explicitly include timezone for clarity
-            options.timeZoneName = 'short';
         }
         
         return date.toLocaleString(undefined, options);

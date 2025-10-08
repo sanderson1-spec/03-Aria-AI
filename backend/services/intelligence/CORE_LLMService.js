@@ -81,7 +81,7 @@ class LLMService extends AbstractService {
     async loadConfiguration() {
         try {
             // First try to get configuration from the configuration service
-            const configData = this.configuration.getConfiguration();
+            const configData = this.configuration.getAllConfiguration ? this.configuration.getAllConfiguration() : {};
             const llmConfig = configData?.llm || {};
             
             // Fallback to environment variables if no configuration service data

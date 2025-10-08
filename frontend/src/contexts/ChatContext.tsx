@@ -119,17 +119,43 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     }
   };
 
-  const deleteChat = (chatId: string) => {
+  const deleteChat = async (chatId: string) => {
+    console.log('🗑️ deleteChat called with chatId:', chatId);
+    
+    try {
+      // Call backend API to delete chat from database
+      const response = await fetch(`http://localhost:3001/api/chat/${chatId}?userId=user-1`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to delete chat from backend:', error);
+        // Continue with frontend deletion even if backend fails
+      } else {
+        console.log('✅ Chat deleted from backend successfully');
+      }
+    } catch (error) {
+      console.error('Error deleting chat from backend:', error);
+      // Continue with frontend deletion even if backend fails
+    }
+
     // Remove the specific chat from the list
+    console.log('📝 Removing chat from frontend state...');
     const updatedChats = chats.filter(chat => chat.id !== chatId);
     setChats(updatedChats);
     
     // If the deleted chat was the current chat, clear current chat
     if (currentChat && currentChat.id === chatId) {
+      console.log('🔄 Clearing current chat...');
       setCurrentChat(null);
       localStorage.removeItem('aria-current-chat-id');
     }
     
+    console.log('✅ Chat deletion complete');
     // Note: localStorage update is handled by the auto-save useEffect
   };
 

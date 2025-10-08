@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CollapsiblePsychologySection } from './CollapsiblePsychologySection';
 import CommitmentPanel from './CommitmentPanel';
+import EventsPanel from './EventsPanel';
 import { useChatContext } from '../../contexts/ChatContext';
 import { useProactiveMessages } from '../../hooks/useProactiveMessages';
 import type { Message } from '../../types';
+import { formatChatTimestamp } from '../../utils/dateFormatter';
+import ReactMarkdown from 'react-markdown';
 
 const ChatPage: React.FC = () => {
   const {
@@ -325,14 +328,26 @@ const ChatPage: React.FC = () => {
         />
       )}
 
-      {/* Commitment Panel */}
+      {/* Tasks and Events Panel */}
       {currentChat && (
         <div className="m-4">
-          <CommitmentPanel 
-            chatId={currentChat.id} 
-            userId="user-1"
-            onVerificationFeedback={handleVerificationFeedback}
-          />
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <h3 className="font-semibold mb-2">Tasks</h3>
+              <CommitmentPanel 
+                chatId={currentChat.id} 
+                userId="user-1"
+                onVerificationFeedback={handleVerificationFeedback}
+              />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold mb-2">Events</h3>
+              <EventsPanel 
+                chatId={currentChat.id} 
+                userId="user-1"
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -414,9 +429,20 @@ const ChatPage: React.FC = () => {
                         )}
                         
                         {/* Feedback Content */}
-                        <p className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap">
-                          {message.content}
-                        </p>
+                        <div className="text-sm leading-relaxed text-gray-800">
+                          <ReactMarkdown
+                            components={{
+                              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                              em: ({ children }) => <em className="italic">{children}</em>,
+                              ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
+                              ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
+                              li: ({ children }) => <li className="mb-1">{children}</li>,
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
                         
                         {/* Resubmit Prompt */}
                         {message.metadata.verification.canResubmit && (
@@ -431,7 +457,7 @@ const ChatPage: React.FC = () => {
                       
                       {/* Timestamp */}
                       <div className="text-xs text-gray-500 mt-1 text-left">
-                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatChatTimestamp(message.timestamp)}
                       </div>
                     </div>
                   </div>
@@ -457,16 +483,29 @@ const ChatPage: React.FC = () => {
                     message.type === 'user' ? 'items-end' : 'items-start'
                   }`}>
                     <div className={`px-4 py-3 rounded-2xl shadow-sm ${
-                      message.type === 'user'
+                      message.type === 'user' 
                         ? 'bg-blue-500 text-white rounded-br-md'
                         : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md'
                     }`}>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                      <div className="text-sm leading-relaxed">
+                        <ReactMarkdown
+                          components={{
+                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                            strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                            em: ({ children }) => <em className="italic">{children}</em>,
+                            ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
+                            li: ({ children }) => <li className="mb-1">{children}</li>,
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                     <div className={`text-xs text-gray-500 mt-1 ${
                       message.type === 'user' ? 'text-right' : 'text-left'
                     }`}>
-                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatChatTimestamp(message.timestamp)}
                     </div>
                   </div>
                 </div>

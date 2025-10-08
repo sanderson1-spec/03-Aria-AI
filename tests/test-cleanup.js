@@ -122,6 +122,8 @@ class TestDataCleanup {
         const tables = [
             // Order matters due to foreign key constraints
             'conversations',
+            'commitments',
+            'events',
             'psychology_states', 
             'proactive_engagement_history',
             'proactive_learning_patterns',

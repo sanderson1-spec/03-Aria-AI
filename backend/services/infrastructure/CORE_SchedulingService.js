@@ -192,13 +192,12 @@ class SchedulingService extends AbstractService {
             const sql = `
                 UPDATE proactive_engagements 
                 SET status = ?, 
-                    delivered_at = CASE WHEN ? = 'delivered' THEN datetime('now') ELSE delivered_at END,
-                    error_message = ?,
+                    actual_timing = CASE WHEN ? = 'delivered' THEN datetime('now') ELSE actual_timing END,
                     updated_at = datetime('now')
                 WHERE id = ?
             `;
 
-            await this.dal.execute(sql, [status, status, errorMessage, engagementId]);
+            await this.dal.execute(sql, [status, status, engagementId]);
 
             this.logger.debug('Updated engagement status', 'SchedulingService', {
                 engagementId,

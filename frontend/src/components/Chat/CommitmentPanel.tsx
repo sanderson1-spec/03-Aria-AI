@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatDateTime } from '../../utils/dateFormatter';
 
 interface Commitment {
   id: string;
@@ -290,7 +291,8 @@ const CommitmentPanel: React.FC<CommitmentPanelProps> = ({ chatId, userId, onVer
         textColor: 'text-red-800',
         iconColor: 'text-red-600',
         label: `⚠️ Overdue by ${daysOverdue} day${daysOverdue > 1 ? 's' : ''}`,
-        date: due.toLocaleDateString()
+        date: formatDateTime(due),
+        fullDate: `**Due Date:** ${formatDateTime(due)}`
       };
     } else if (diffHours < 24) {
       // Due soon (within 24 hours)
@@ -302,7 +304,8 @@ const CommitmentPanel: React.FC<CommitmentPanelProps> = ({ chatId, userId, onVer
         textColor: 'text-amber-800',
         iconColor: 'text-amber-600',
         label: `⏰ Due in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}`,
-        date: due.toLocaleDateString()
+        date: formatDateTime(due),
+        fullDate: `**Due Date:** ${formatDateTime(due)}`
       };
     } else {
       // Future
@@ -314,7 +317,8 @@ const CommitmentPanel: React.FC<CommitmentPanelProps> = ({ chatId, userId, onVer
         textColor: 'text-green-800',
         iconColor: 'text-green-600',
         label: `📅 Due in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`,
-        date: due.toLocaleDateString()
+        date: formatDateTime(due),
+        fullDate: `**Due Date:** ${formatDateTime(due)}`
       };
     }
   };

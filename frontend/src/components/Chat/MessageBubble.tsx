@@ -2,6 +2,8 @@ import React from 'react';
 import type { Message } from '../../types';
 import { Bot, User, AlertCircle, Zap } from 'lucide-react';
 import { clsx } from 'clsx';
+import { formatChatTimestamp } from '../../utils/dateFormatter';
+import ReactMarkdown from 'react-markdown';
 
 interface MessageBubbleProps {
   message: Message;
@@ -11,13 +13,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
   const isUser = message.type === 'user';
   const isSystem = message.type === 'system';
   const isProactive = message.metadata?.proactive;
-
-  const formatTime = (timestamp: Date) => {
-    return new Intl.DateTimeFormat('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(timestamp));
-  };
 
   if (isSystem) {
     return (
@@ -67,7 +62,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
             </div>
           )}
           
-          <p className="whitespace-pre-wrap">{message.content}</p>
+          <div className="prose prose-sm max-w-none">
+            <ReactMarkdown
+              components={{
+                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                em: ({ children }) => <em className="italic">{children}</em>,
+                ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
+                li: ({ children }) => <li className="mb-1">{children}</li>,
+                code: ({ children }) => <code className="bg-black bg-opacity-10 px-1 py-0.5 rounded text-sm">{children}</code>,
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
           
           {/* Psychology trigger info */}
           {message.metadata?.psychologyTrigger && !isUser && (
@@ -82,7 +91,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
           "text-xs text-gray-500 mt-1",
           isUser ? "text-right" : "text-left"
         )}>
-          {formatTime(message.timestamp)}
+          {formatChatTimestamp(message.timestamp)}
         </div>
       </div>
     </div>

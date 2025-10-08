@@ -24,7 +24,7 @@ const Navigation: React.FC<NavigationProps> = ({
   currentChat = null,
   onSwitchToChat = () => {},
   onDeleteChat = () => {},
-  onCreateNewChat = () => {},
+  onCreateNewChat = () => {}
 }) => {
   const location = useLocation();
 

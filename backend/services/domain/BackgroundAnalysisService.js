@@ -246,6 +246,57 @@ class BackgroundAnalysisService extends AbstractService {
                 }
             }
 
+            // Check if an event was detected and create event record
+            if (decision && decision.event_detected && decision.event_detected.has_event) {
+                try {
+                    const eventData = decision.event_detected.event;
+                    
+                    this.logger.info('Creating event record', 'BackgroundAnalysisService', {
+                        sessionId,
+                        userId,
+                        eventTitle: eventData?.title,
+                        recurrenceType: eventData?.recurrence_type
+                    });
+
+                    // Parse starts_at and calculate initial next_occurrence
+                    const startsAt = this._parseStartTime(eventData.starts_at);
+                    const nextOccurrence = this._calculateInitialNextOccurrence(eventData, startsAt);
+
+                    // Create event record
+                    const eventId = this.generateId();
+                    await this.dal.events.createEvent({
+                        id: eventId,
+                        user_id: userId,
+                        chat_id: sessionId,
+                        character_id: characterId,
+                        title: eventData?.title || 'Scheduled Event',
+                        description: eventData?.description || '',
+                        recurrence_type: eventData?.recurrence_type || 'once',
+                        recurrence_data: JSON.stringify(eventData?.recurrence_data || {}),
+                        starts_at: startsAt,
+                        next_occurrence: nextOccurrence,
+                        is_active: 1,
+                        status: 'scheduled'
+                    });
+
+                    this.logger.info('Event created successfully', 'BackgroundAnalysisService', {
+                        eventId,
+                        sessionId,
+                        userId,
+                        title: eventData?.title,
+                        nextOccurrence
+                    });
+
+                } catch (eventError) {
+                    this.logger.error('Failed to create event record', 'BackgroundAnalysisService', {
+                        sessionId,
+                        userId,
+                        error: eventError.message
+                    });
+                    // Continue processing - event creation failure shouldn't block other operations
+                }
+            }
+
             // Process the decision for delivery if proactive engagement is recommended
             this.logger.info('Checking proactive decision condition', 'BackgroundAnalysisService', {
                 sessionId,
@@ -319,6 +370,123 @@ class BackgroundAnalysisService extends AbstractService {
                 error: error.message 
             });
         }
+    }
+
+    /**
+     * Parse start time from relative or absolute format
+     * Handles: ISO timestamps, "tomorrow 7am", "tonight", etc.
+     */
+    _parseStartTime(startsAt) {
+        if (!startsAt) {
+            return new Date().toISOString();
+        }
+
+        // If it's already an ISO timestamp, return it
+        if (startsAt.match(/^\d{4}-\d{2}-\d{2}T/)) {
+            return startsAt;
+        }
+
+        // Handle relative times
+        const now = new Date();
+        const lowerStart = startsAt.toLowerCase();
+
+        // Tomorrow patterns
+        if (lowerStart.includes('tomorrow')) {
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            
+            // Extract time if specified
+            const timeMatch = lowerStart.match(/(\d{1,2})\s*(am|pm)/);
+            if (timeMatch) {
+                let hours = parseInt(timeMatch[1]);
+                if (timeMatch[2] === 'pm' && hours !== 12) hours += 12;
+                if (timeMatch[2] === 'am' && hours === 12) hours = 0;
+                tomorrow.setHours(hours, 0, 0, 0);
+            } else {
+                tomorrow.setHours(9, 0, 0, 0); // Default to 9am
+            }
+            
+            return tomorrow.toISOString();
+        }
+
+        // Tonight pattern
+        if (lowerStart.includes('tonight')) {
+            const tonight = new Date(now);
+            tonight.setHours(20, 0, 0, 0); // Default to 8pm
+            return tonight.toISOString();
+        }
+
+        // This evening
+        if (lowerStart.includes('evening')) {
+            const evening = new Date(now);
+            evening.setHours(18, 0, 0, 0); // Default to 6pm
+            return evening.toISOString();
+        }
+
+        // Default: assume it's today at the current time or parse as date
+        try {
+            return new Date(startsAt).toISOString();
+        } catch {
+            return now.toISOString();
+        }
+    }
+
+    /**
+     * Calculate initial next_occurrence based on event type
+     * For 'once': next_occurrence = starts_at
+     * For recurring: calculate first trigger time based on recurrence_data
+     */
+    _calculateInitialNextOccurrence(eventData, startsAt) {
+        const recurrenceType = eventData.recurrence_type || 'once';
+        const recurrenceData = eventData.recurrence_data || {};
+
+        // For one-time events, next_occurrence is starts_at
+        if (recurrenceType === 'once') {
+            return startsAt;
+        }
+
+        // For recurring events, calculate first occurrence
+        const startDate = new Date(startsAt);
+
+        if (recurrenceType === 'daily' && recurrenceData.time) {
+            // Daily events: use specified time
+            const [hours, minutes] = recurrenceData.time.split(':').map(Number);
+            const nextDate = new Date(startDate);
+            nextDate.setHours(hours, minutes, 0, 0);
+            
+            // If the time has passed today, schedule for tomorrow
+            if (nextDate <= new Date()) {
+                nextDate.setDate(nextDate.getDate() + 1);
+            }
+            
+            return nextDate.toISOString();
+        }
+
+        if (recurrenceType === 'weekly') {
+            // Weekly events: use starts_at as first occurrence
+            return startDate.toISOString();
+        }
+
+        if (recurrenceType === 'monthly') {
+            // Monthly events: use starts_at as first occurrence
+            return startDate.toISOString();
+        }
+
+        if (recurrenceType === 'yearly') {
+            // Yearly events: use starts_at as first occurrence
+            return startDate.toISOString();
+        }
+
+        // Default: return starts_at
+        return startsAt;
+    }
+
+    /**
+     * Generate unique ID for events
+     */
+    generateId() {
+        const { v4: uuidv4 } = require('uuid');
+        return uuidv4();
     }
 }
 

@@ -98,6 +98,30 @@ export interface Commitment {
   verification?: CommitmentVerification; // For immediate verification response
 }
 
+// Event types
+export interface Event {
+  id: string;
+  user_id: string;
+  chat_id: string;
+  character_id: string;
+  title: string;
+  description?: string;
+  recurrence_type: 'once' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  recurrence_data?: {
+    time?: string;
+    day_of_week?: string;
+    day_of_month?: number;
+  };
+  starts_at: string;
+  ends_at?: string;
+  last_occurrence?: string;
+  next_occurrence: string;
+  is_active: boolean;
+  status: 'scheduled' | 'completed' | 'missed' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+}
+
 // WebSocket message types
 export interface WebSocketMessage {
   type: 'chat_message' | 'psychology_update' | 'proactive_message' | 'typing' | 'error';

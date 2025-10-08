@@ -152,11 +152,16 @@ export const CollapsibleConversationList: React.FC<CollapsibleConversationListPr
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Delete conversation with ${chat.characterName}?`)) {
+                        e.preventDefault();
+                        
+                        const confirmMessage = `Delete conversation with ${chat.characterName}?\n\nThis will permanently delete all messages in this conversation.`;
+                        const confirmed = window.confirm(confirmMessage);
+                        
+                        if (confirmed) {
                           onDeleteChat(chat.id);
                         }
                       }}
-                      className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all border border-transparent hover:border-red-300"
+                      className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full z-10 opacity-100 group-hover:opacity-100 transition-all border border-transparent hover:border-red-300"
                       title={`Delete this conversation with ${chat.characterName}`}
                     >
                       <Trash2 className="w-3 h-3" />
