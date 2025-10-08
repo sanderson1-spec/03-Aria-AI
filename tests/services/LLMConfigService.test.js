@@ -15,12 +15,13 @@ describe('CORE_LLMConfigService', () => {
     let llmConfigService;
     let mockDeps;
     let mockFetch;
+    let mockDAL;
 
     beforeEach(() => {
         mockDeps = createMockDependencies();
         
         // Add database service mock with DAL
-        mockDeps.database = {
+        mockDAL = {
             users: {
                 findById: jest.fn(),
                 updateLLMPreferences: jest.fn()
@@ -31,8 +32,18 @@ describe('CORE_LLMConfigService', () => {
             },
             configuration: {
                 get: jest.fn(),
-                set: jest.fn()
+                set: jest.fn(),
+                getConfigValue: jest.fn().mockResolvedValue(null), // Default: no config found
+                setConfigValue: jest.fn().mockResolvedValue(true)
             }
+        };
+        
+        mockDeps.database = {
+            getDAL: jest.fn(() => mockDAL),
+            // Add direct access for tests that expect it
+            users: mockDAL.users,
+            characters: mockDAL.characters,
+            configuration: mockDAL.configuration
         };
         
         // Add configuration mock
@@ -122,10 +133,11 @@ describe('CORE_LLMConfigService', () => {
                 id: 1,
                 llm_preferences: characterPrefs
             });
+            mockDAL.configuration.getConfigValue.mockResolvedValue(null); // Global context window
 
             const result = await llmConfigService.resolveModelConfig(1, 1, 'conversational');
             
-            expect(result).toEqual({ model: 'character-model' });
+            expect(result).toEqual({ model: 'character-model', context_window_messages: 30 });
             expect(mockDeps.database.characters.findById).toHaveBeenCalledWith(1);
             expect(mockDeps.logger.debug).toHaveBeenCalledWith(
                 'Resolved conversational model from character preferences',
@@ -143,10 +155,11 @@ describe('CORE_LLMConfigService', () => {
                 id: 1,
                 llm_preferences: { conversational: { model: 'user-model' } }
             });
+            mockDAL.configuration.getConfigValue.mockResolvedValue(null); // Global context window
 
             const result = await llmConfigService.resolveModelConfig(1, 1, 'conversational');
             
-            expect(result).toEqual({ model: 'user-model' });
+            expect(result).toEqual({ model: 'user-model', context_window_messages: 30 });
             expect(mockDeps.database.users.findById).toHaveBeenCalledWith(1);
             expect(mockDeps.logger.debug).toHaveBeenCalledWith(
                 'Resolved conversational model from user preferences',
@@ -164,14 +177,16 @@ describe('CORE_LLMConfigService', () => {
                 id: 1,
                 llm_preferences: null
             });
-            mockDeps.database.configuration.get.mockResolvedValue({
-                value: { model: 'global-conversational-model' }
+            mockDAL.configuration.getConfigValue.mockImplementation((key) => {
+                if (key === 'llm_conversational_model') {
+                    return Promise.resolve({ model: 'global-conversational-model' });
+                }
+                return Promise.resolve(null); // Context window
             });
 
             const result = await llmConfigService.resolveModelConfig(1, 1, 'conversational');
             
-            expect(result).toEqual({ model: 'global-conversational-model' });
-            expect(mockDeps.database.configuration.get).toHaveBeenCalledWith('llm_conversational_model');
+            expect(result).toEqual({ model: 'global-conversational-model', context_window_messages: 30 });
             expect(mockDeps.logger.debug).toHaveBeenCalledWith(
                 'Resolved conversational model from global config',
                 'CORE_LLMConfigService',
@@ -184,10 +199,11 @@ describe('CORE_LLMConfigService', () => {
                 id: 1,
                 llm_preferences: { conversational: { model: 'user-model' } }
             });
+            mockDAL.configuration.getConfigValue.mockResolvedValue(null); // Global context window
 
             const result = await llmConfigService.resolveModelConfig(1, null, 'conversational');
             
-            expect(result).toEqual({ model: 'user-model' });
+            expect(result).toEqual({ model: 'user-model', context_window_messages: 30 });
             expect(mockDeps.database.characters.findById).not.toHaveBeenCalled();
         });
     });
@@ -198,10 +214,11 @@ describe('CORE_LLMConfigService', () => {
                 id: 1,
                 llm_preferences: { analytical: { model: 'user-analytical-model' } }
             });
+            mockDAL.configuration.getConfigValue.mockResolvedValue(null); // Global context window
 
             const result = await llmConfigService.resolveModelConfig(1, 1, 'analytical');
             
-            expect(result).toEqual({ model: 'user-analytical-model' });
+            expect(result).toEqual({ model: 'user-analytical-model', context_window_messages: 30 });
             expect(mockDeps.database.characters.findById).not.toHaveBeenCalled();
             expect(mockDeps.database.users.findById).toHaveBeenCalledWith(1);
             expect(mockDeps.logger.debug).toHaveBeenCalledWith(
@@ -216,14 +233,16 @@ describe('CORE_LLMConfigService', () => {
                 id: 1,
                 llm_preferences: null
             });
-            mockDeps.database.configuration.get.mockResolvedValue({
-                value: { model: 'global-analytical-model' }
+            mockDAL.configuration.getConfigValue.mockImplementation((key) => {
+                if (key === 'llm_analytical_model') {
+                    return Promise.resolve({ model: 'global-analytical-model' });
+                }
+                return Promise.resolve(null); // Context window
             });
 
             const result = await llmConfigService.resolveModelConfig(1, 1, 'analytical');
             
-            expect(result).toEqual({ model: 'global-analytical-model' });
-            expect(mockDeps.database.configuration.get).toHaveBeenCalledWith('llm_analytical_model');
+            expect(result).toEqual({ model: 'global-analytical-model', context_window_messages: 30 });
             expect(mockDeps.logger.debug).toHaveBeenCalledWith(
                 'Resolved analytical model from global config',
                 'CORE_LLMConfigService',

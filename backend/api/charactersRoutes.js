@@ -8,15 +8,32 @@ class CharactersRoutes {
         this.setupRoutes();
     }
 
+    /**
+     * Extract userId from request (query parameter or header)
+     * @param {object} req - Express request object
+     * @returns {string|null} userId or null if not found
+     */
+    extractUserId(req) {
+        return req.query.userId || req.headers['x-user-id'] || null;
+    }
+
     setupRoutes() {
         // CORS is handled by main server middleware - no need for duplicate headers
 
-        // Get all available characters (global personalities)
+        // Get user's characters
         this.router.get('/', async (req, res) => {
             try {
+                const userId = this.extractUserId(req);
+                if (!userId) {
+                    return res.status(400).json({ 
+                        error: 'userId required',
+                        details: 'Provide userId as query parameter or x-user-id header'
+                    });
+                }
+
                 const databaseService = this.serviceFactory.get('database');
                 
-                const characters = await databaseService.getDAL().personalities.getAllCharacters();
+                const characters = await databaseService.getDAL().personalities.getUserCharacters(userId);
                 
                 res.json({
                     success: true,
@@ -35,12 +52,27 @@ class CharactersRoutes {
         // Get a specific character
         this.router.get('/:characterId', async (req, res) => {
             try {
+                const userId = this.extractUserId(req);
+                if (!userId) {
+                    return res.status(400).json({ 
+                        error: 'userId required',
+                        details: 'Provide userId as query parameter or x-user-id header'
+                    });
+                }
+
                 const { characterId } = req.params;
                 const databaseService = this.serviceFactory.get('database');
                 
                 const character = await databaseService.getDAL().personalities.getCharacter(characterId);
                 
                 if (!character) {
+                    return res.status(404).json({ 
+                        error: 'Character not found' 
+                    });
+                }
+
+                // Verify ownership
+                if (character.user_id !== userId) {
                     return res.status(404).json({ 
                         error: 'Character not found' 
                     });
@@ -63,6 +95,14 @@ class CharactersRoutes {
         // Create a new character
         this.router.post('/', async (req, res) => {
             try {
+                const userId = this.extractUserId(req);
+                if (!userId) {
+                    return res.status(400).json({ 
+                        error: 'userId required',
+                        details: 'Provide userId as query parameter or x-user-id header'
+                    });
+                }
+
                 const { name, description, background, avatar } = req.body;
                 
                 if (!name || !name.trim()) {
@@ -76,6 +116,7 @@ class CharactersRoutes {
                 
                 const characterData = {
                     id: characterId,
+                    user_id: userId,
                     name: name.trim(),
                     description: description?.trim() || '',
                     background: background?.trim() || '',
@@ -102,6 +143,14 @@ class CharactersRoutes {
         // Update a character
         this.router.put('/:characterId', async (req, res) => {
             try {
+                const userId = this.extractUserId(req);
+                if (!userId) {
+                    return res.status(400).json({ 
+                        error: 'userId required',
+                        details: 'Provide userId as query parameter or x-user-id header'
+                    });
+                }
+
                 const { characterId } = req.params;
                 const { name, description, background, avatar, llm_preferences } = req.body;
                 const databaseService = this.serviceFactory.get('database');
@@ -109,6 +158,13 @@ class CharactersRoutes {
                 // Check if character exists
                 const existingCharacter = await databaseService.getDAL().personalities.getCharacter(characterId);
                 if (!existingCharacter) {
+                    return res.status(404).json({ 
+                        error: 'Character not found' 
+                    });
+                }
+
+                // Verify ownership
+                if (existingCharacter.user_id !== userId) {
                     return res.status(404).json({ 
                         error: 'Character not found' 
                     });
@@ -164,6 +220,14 @@ class CharactersRoutes {
         // Delete a character (soft delete - sets is_active to 0)
         this.router.delete('/:characterId', async (req, res) => {
             try {
+                const userId = this.extractUserId(req);
+                if (!userId) {
+                    return res.status(400).json({ 
+                        error: 'userId required',
+                        details: 'Provide userId as query parameter or x-user-id header'
+                    });
+                }
+
                 const { characterId } = req.params;
                 console.log(`🗑️  Delete request for character: ${characterId}`);
                 
@@ -173,6 +237,15 @@ class CharactersRoutes {
                 const existingCharacter = await databaseService.getDAL().personalities.getCharacter(characterId);
                 if (!existingCharacter) {
                     console.log(`⚠️  Character not found: ${characterId}`);
+                    return res.status(404).json({ 
+                        success: false,
+                        error: 'Character not found' 
+                    });
+                }
+
+                // Verify ownership
+                if (existingCharacter.user_id !== userId) {
+                    console.log(`⚠️  User ${userId} attempted to delete character owned by ${existingCharacter.user_id}`);
                     return res.status(404).json({ 
                         success: false,
                         error: 'Character not found' 
@@ -203,14 +276,28 @@ class CharactersRoutes {
         // Export a character as JSON file
         this.router.get('/:characterId/export', async (req, res) => {
             try {
+                const userId = this.extractUserId(req);
+                if (!userId) {
+                    return res.status(400).json({ 
+                        error: 'userId required',
+                        details: 'Provide userId as query parameter or x-user-id header'
+                    });
+                }
+
                 const { characterId } = req.params;
-                const { userId = 'system' } = req.query;
                 const databaseService = this.serviceFactory.get('database');
                 
                 // Fetch character from database
                 const character = await databaseService.getDAL().personalities.getCharacter(characterId);
                 
                 if (!character) {
+                    return res.status(404).json({ 
+                        error: 'Character not found' 
+                    });
+                }
+
+                // Verify ownership
+                if (character.user_id !== userId) {
                     return res.status(404).json({ 
                         error: 'Character not found' 
                     });
@@ -250,8 +337,15 @@ class CharactersRoutes {
         // Import a character from JSON file
         this.router.post('/import', async (req, res) => {
             try {
+                const userId = this.extractUserId(req);
+                if (!userId) {
+                    return res.status(400).json({ 
+                        error: 'userId required',
+                        details: 'Provide userId as query parameter or x-user-id header'
+                    });
+                }
+
                 const importData = req.body;
-                const { userId = 'system' } = req.query;
                 const databaseService = this.serviceFactory.get('database');
                 
                 // Validate JSON structure
@@ -336,6 +430,7 @@ class CharactersRoutes {
                 const characterId = uuidv4();
                 const newCharacterData = {
                     id: characterId,
+                    user_id: userId,
                     name: characterData.name.trim(),
                     description: characterData.description?.trim() || '',
                     background: characterData.background?.trim() || '',

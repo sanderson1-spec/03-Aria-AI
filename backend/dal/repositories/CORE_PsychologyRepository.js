@@ -517,6 +517,74 @@ class PsychologyRepository extends BaseRepository {
     }
 
     /**
+     * DOMAIN LAYER: Get significant memories above threshold, excluding recent messages
+     * Used for deep memory search - returns ALL significant memories without limit
+     */
+    async getSignificantMemories(sessionId, excludeMessageIds, significanceThreshold) {
+        try {
+            this.validateRequiredFields(
+                { sessionId, excludeMessageIds, significanceThreshold }, 
+                ['sessionId', 'excludeMessageIds', 'significanceThreshold'], 
+                'get significant memories'
+            );
+
+            // Build the exclusion clause
+            const excludePlaceholders = excludeMessageIds.length > 0 
+                ? `AND cl.id NOT IN (${excludeMessageIds.map(() => '?').join(',')})` 
+                : '';
+
+            const sql = `
+                SELECT 
+                    cmw.*,
+                    cl.message as content,
+                    cl.sender,
+                    cl.timestamp,
+                    (cmw.emotional_impact_score + cmw.relationship_relevance + 
+                     cmw.personal_significance + cmw.contextual_importance) as total_significance
+                FROM character_memory_weights cmw
+                JOIN conversation_logs cl ON cmw.message_id = cl.id AND cmw.session_id = cl.session_id
+                WHERE cmw.session_id = ?
+                ${excludePlaceholders}
+                AND (
+                    cmw.emotional_impact_score >= ? OR
+                    cmw.relationship_relevance >= ? OR
+                    cmw.personal_significance >= ? OR
+                    cmw.contextual_importance >= ?
+                )
+                ORDER BY total_significance DESC
+            `;
+
+            const params = [
+                sessionId, 
+                ...excludeMessageIds, 
+                significanceThreshold, 
+                significanceThreshold, 
+                significanceThreshold, 
+                significanceThreshold
+            ];
+            
+            const results = await this.dal.query(sql, params);
+            
+            // Parse JSON fields
+            return results.map(result => {
+                try {
+                    result.memory_tags = JSON.parse(result.memory_tags || '[]');
+                } catch (error) {
+                    this.logger.error('Error parsing memory tags', 'PsychologyRepository', { error: error.message });
+                    result.memory_tags = [];
+                }
+                return result;
+            });
+        } catch (error) {
+            throw this.errorHandler.wrapRepositoryError(
+                error, 
+                'Failed to get significant memories', 
+                { sessionId, excludeCount: excludeMessageIds.length, significanceThreshold }
+            );
+        }
+    }
+
+    /**
      * DOMAIN LAYER: Update memory recall frequency
      */
     async updateMemoryRecall(sessionId, messageId) {

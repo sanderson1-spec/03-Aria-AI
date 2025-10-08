@@ -8,6 +8,7 @@ interface Character {
   display: string;
   description: string;
   definition: string;
+  user_id?: string;
   usage_count: number;
   is_active: boolean;
   created_at: string;
@@ -17,6 +18,7 @@ interface Character {
       model?: string;
       temperature?: number;
       max_tokens?: number;
+      context_window_messages?: number;
     };
   };
 }
@@ -28,6 +30,9 @@ interface LLMModel {
 
 
 const CharactersPage: React.FC = () => {
+  // TODO: Get userId from auth context once authentication is implemented
+  const userId = "default-user";
+  
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -41,7 +46,7 @@ const CharactersPage: React.FC = () => {
 
   const loadCharacters = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/characters`);
+      const response = await fetch(`${API_BASE_URL}/api/characters?userId=${userId}`);
       const data = await response.json();
       
       if (data.success) {
@@ -80,7 +85,7 @@ const CharactersPage: React.FC = () => {
     setMessage({ type: 'success', text: `Deleting ${characterName}...` });
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/characters/${characterId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/characters/${characterId}?userId=${userId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
@@ -109,7 +114,7 @@ const CharactersPage: React.FC = () => {
 
   const exportCharacter = async (characterId: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/characters/${characterId}/export?userId=default-user`);
+      const response = await fetch(`${API_BASE_URL}/api/characters/${characterId}/export?userId=${userId}`);
       const data = await response.json();
       
       // Create a blob from the JSON data
@@ -165,7 +170,7 @@ const CharactersPage: React.FC = () => {
       setMessage({ type: 'success', text: 'Uploading to server...' });
 
       // Send to server
-      const response = await fetch(`${API_BASE_URL}/api/characters/import?userId=default-user`, {
+      const response = await fetch(`${API_BASE_URL}/api/characters/import?userId=${userId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -381,6 +386,7 @@ const CharactersPage: React.FC = () => {
         {(showCreateModal || editingCharacter) && (
           <CharacterModal
             character={editingCharacter}
+            userId={userId}
             onClose={() => {
               setShowCreateModal(false);
               setEditingCharacter(null);
@@ -404,11 +410,12 @@ const CharactersPage: React.FC = () => {
 // Character Modal Component
 interface CharacterModalProps {
   character: Character | null;
+  userId: string;
   onClose: () => void;
   onSave: () => void;
 }
 
-const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onSave }) => {
+const CharacterModal: React.FC<CharacterModalProps> = ({ character, userId, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: character?.name || '',
     description: character?.description || '',
@@ -424,6 +431,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
   const [customModel, setCustomModel] = useState('');
   const [customTemperature, setCustomTemperature] = useState(0.7);
   const [customMaxTokens, setCustomMaxTokens] = useState(2000);
+  const [customContextWindow, setCustomContextWindow] = useState(30);
 
   useEffect(() => {
     if (character) {
@@ -440,12 +448,14 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
         setCustomModel(character.llm_preferences.conversational.model || '');
         setCustomTemperature(character.llm_preferences.conversational.temperature ?? 0.7);
         setCustomMaxTokens(character.llm_preferences.conversational.max_tokens ?? 2000);
+        setCustomContextWindow(character.llm_preferences.conversational.context_window_messages ?? 30);
       } else {
         // Reset LLM preferences if character doesn't have them
         setUseCustomModel(false);
         setCustomModel('');
         setCustomTemperature(0.7);
         setCustomMaxTokens(2000);
+        setCustomContextWindow(30);
       }
     } else {
       // Reset all form data for new character
@@ -459,6 +469,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
       setCustomModel('');
       setCustomTemperature(0.7);
       setCustomMaxTokens(2000);
+      setCustomContextWindow(30);
     }
     
     // Load available models
@@ -491,20 +502,26 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
     
     try {
       const url = character 
-        ? `${API_BASE_URL}/api/characters/${character.id}`
-        : `${API_BASE_URL}/api/characters`;
+        ? `${API_BASE_URL}/api/characters/${character.id}?userId=${userId}`
+        : `${API_BASE_URL}/api/characters?userId=${userId}`;
       
       const method = character ? 'PUT' : 'POST';
       
       // Build request body with optional llm_preferences
       const requestBody: any = { ...formData };
       
+      // Include user_id for new character creation
+      if (!character) {
+        requestBody.user_id = userId;
+      }
+      
       if (useCustomModel && customModel) {
         requestBody.llm_preferences = {
           conversational: {
             model: customModel,
             temperature: customTemperature,
-            max_tokens: customMaxTokens
+            max_tokens: customMaxTokens,
+            context_window_messages: customContextWindow
           }
         };
       } else {
@@ -698,6 +715,24 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Maximum response length (100-8000)
+                  </p>
+                </div>
+
+                {/* Context Window */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Context Window (messages)
+                  </label>
+                  <input
+                    type="number"
+                    value={customContextWindow}
+                    onChange={(e) => setCustomContextWindow(parseInt(e.target.value) || 30)}
+                    min="10"
+                    max="100"
+                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Override global context window for this character
                   </p>
                 </div>
               </div>

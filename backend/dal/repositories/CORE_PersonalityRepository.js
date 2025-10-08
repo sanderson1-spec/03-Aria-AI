@@ -327,16 +327,64 @@ class PersonalityRepository extends BaseRepository {
     }
 
     /**
-     * Get a specific character by ID
-     * CLEAN ARCHITECTURE: Domain layer entity retrieval
+     * Get user-specific characters
+     * CLEAN ARCHITECTURE: Domain layer entity retrieval with user isolation
      */
-    async getCharacter(characterId) {
+    async getUserCharacters(userId) {
+        try {
+            this.validateRequiredFields({ userId }, ['userId'], 'get user characters');
+            
+            const characters = await this.findAll(
+                { user_id: userId, is_active: 1 }, 
+                'created_at DESC'
+            );
+            
+            // Parse llm_preferences JSON for each character
+            return characters.map(character => {
+                if (character.llm_preferences) {
+                    try {
+                        character.llm_preferences = JSON.parse(character.llm_preferences);
+                    } catch (e) {
+                        // If parsing fails, leave as is
+                        this.logger.warn('Failed to parse llm_preferences JSON', 'PersonalityRepository', { characterId: character.id });
+                    }
+                }
+                return character;
+            });
+        } catch (error) {
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to get user characters');
+        }
+    }
+
+    /**
+     * Get a specific character by ID
+     * CLEAN ARCHITECTURE: Domain layer entity retrieval with optional user ownership check
+     * @param {string} characterId - The character ID to retrieve
+     * @param {string} [userId] - Optional user ID to verify ownership
+     * @returns {object|null} Character object or null if not found/unauthorized
+     */
+    async getCharacter(characterId, userId = null) {
         try {
             this.validateRequiredFields({ characterId }, ['characterId'], 'get character');
             
             const character = await this.findById(characterId);
             
-            if (character && character.llm_preferences) {
+            // If no character found, return null
+            if (!character) {
+                return null;
+            }
+            
+            // If userId provided, verify ownership
+            if (userId !== null && character.user_id !== userId) {
+                this.logger.warn('User attempted to access character they do not own', 'PersonalityRepository', { 
+                    characterId, 
+                    userId, 
+                    ownerId: character.user_id 
+                });
+                return null;
+            }
+            
+            if (character.llm_preferences) {
                 // Parse JSON string to object
                 try {
                     character.llm_preferences = JSON.parse(character.llm_preferences);
@@ -353,16 +401,17 @@ class PersonalityRepository extends BaseRepository {
     }
 
     /**
-     * Create a new global character
-     * CLEAN ARCHITECTURE: Domain layer entity creation
+     * Create a new character
+     * CLEAN ARCHITECTURE: Domain layer entity creation with user isolation
      */
     async createCharacter(characterData) {
         try {
-            this.validateRequiredFields(characterData, ['id', 'name'], 'create character');
+            this.validateRequiredFields(characterData, ['id', 'name', 'user_id'], 'create character');
 
             const data = {
                 id: characterData.id,
                 name: characterData.name,
+                user_id: characterData.user_id,
                 display: characterData.avatar || 'default.png',
                 description: characterData.description || '',
                 definition: characterData.background || '',
@@ -386,6 +435,10 @@ class PersonalityRepository extends BaseRepository {
             };
 
             const result = await this.create(data);
+            this.logger.info('Character created successfully', 'PersonalityRepository', { 
+                characterId: result.id, 
+                userId: characterData.user_id 
+            });
             return { created: true, id: result.id };
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to create character');

@@ -33,15 +33,15 @@ describe('CharactersRoutes API', () => {
 
     it('should get all characters', async () => {
         const mockCharacters = [
-            { id: '1', name: 'Aria', description: 'Friendly AI', is_active: true },
-            { id: '2', name: 'Nova', description: 'Creative AI', is_active: true }
+            { id: '1', name: 'Aria', description: 'Friendly AI', is_active: true, user_id: 'test-user' },
+            { id: '2', name: 'Nova', description: 'Creative AI', is_active: true, user_id: 'test-user' }
         ];
 
         const mockServiceFactory = createServiceFactory({
             database: {
                 getDAL: jest.fn().mockReturnValue({
                     personalities: {
-                        getAllCharacters: jest.fn().mockResolvedValue(mockCharacters)
+                        getUserCharacters: jest.fn().mockResolvedValue(mockCharacters)
                     }
                 })
             }
@@ -50,7 +50,9 @@ describe('CharactersRoutes API', () => {
         const CharactersRoutes = require('../../backend/api/charactersRoutes');
         const charactersRoutes = new CharactersRoutes(mockServiceFactory);
 
-        const req = {};
+        const req = {
+            query: { userId: 'test-user' }
+        };
         const res = {
             json: jest.fn(),
             status: jest.fn().mockReturnThis()
@@ -75,7 +77,8 @@ describe('CharactersRoutes API', () => {
             id: 'aria-1', 
             name: 'Aria', 
             description: 'Friendly AI assistant',
-            definition: 'Background info'
+            definition: 'Background info',
+            user_id: 'test-user'
         };
 
         const mockServiceFactory = createServiceFactory({
@@ -91,7 +94,10 @@ describe('CharactersRoutes API', () => {
         const CharactersRoutes = require('../../backend/api/charactersRoutes');
         const charactersRoutes = new CharactersRoutes(mockServiceFactory);
 
-        const req = { params: { characterId: 'aria-1' } };
+        const req = { 
+            params: { characterId: 'aria-1' },
+            query: { userId: 'test-user' }
+        };
         const res = {
             json: jest.fn(),
             status: jest.fn().mockReturnThis()
@@ -125,7 +131,10 @@ describe('CharactersRoutes API', () => {
         const CharactersRoutes = require('../../backend/api/charactersRoutes');
         const charactersRoutes = new CharactersRoutes(mockServiceFactory);
 
-        const req = { params: { characterId: 'nonexistent' } };
+        const req = { 
+            params: { characterId: 'nonexistent' },
+            query: { userId: 'test-user' }
+        };
         const res = {
             json: jest.fn(),
             status: jest.fn().mockReturnThis()
@@ -162,6 +171,7 @@ describe('CharactersRoutes API', () => {
         const charactersRoutes = new CharactersRoutes(mockServiceFactory);
 
         const req = {
+            query: { userId: 'test-user' },
             body: {
                 name: 'Test Character',
                 description: 'A test character',
@@ -187,7 +197,8 @@ describe('CharactersRoutes API', () => {
                 message: 'Character created successfully',
                 data: expect.objectContaining({
                     name: 'Test Character',
-                    description: 'A test character'
+                    description: 'A test character',
+                    user_id: 'test-user'
                 })
             })
         );
@@ -198,7 +209,10 @@ describe('CharactersRoutes API', () => {
         const CharactersRoutes = require('../../backend/api/charactersRoutes');
         const charactersRoutes = new CharactersRoutes(mockServiceFactory);
 
-        const req = { body: { name: '' } }; // Empty name
+        const req = { 
+            query: { userId: 'test-user' },
+            body: { name: '' } // Empty name
+        };
         const res = {
             json: jest.fn(),
             status: jest.fn().mockReturnThis()
@@ -222,7 +236,8 @@ describe('CharactersRoutes API', () => {
         const existingCharacter = { 
             id: 'test-1', 
             name: 'Original Name', 
-            description: 'Original description' 
+            description: 'Original description',
+            user_id: 'test-user'
         };
         
         const updateResult = { updated_at: new Date() };
@@ -243,6 +258,7 @@ describe('CharactersRoutes API', () => {
 
         const req = {
             params: { characterId: 'test-1' },
+            query: { userId: 'test-user' },
             body: {
                 name: 'Updated Name',
                 description: 'Updated description'
@@ -284,6 +300,7 @@ describe('CharactersRoutes API', () => {
 
         const req = {
             params: { characterId: 'nonexistent' },
+            query: { userId: 'test-user' },
             body: { name: 'Updated Name' }
         };
 
@@ -307,7 +324,7 @@ describe('CharactersRoutes API', () => {
     });
 
     it('should delete character', async () => {
-        const existingCharacter = { id: 'test-1', name: 'Test Character' };
+        const existingCharacter = { id: 'test-1', name: 'Test Character', user_id: 'test-user' };
         const deleteResult = { deleted: true };
 
         const mockServiceFactory = createServiceFactory({
@@ -324,7 +341,10 @@ describe('CharactersRoutes API', () => {
         const CharactersRoutes = require('../../backend/api/charactersRoutes');
         const charactersRoutes = new CharactersRoutes(mockServiceFactory);
 
-        const req = { params: { characterId: 'test-1' } };
+        const req = { 
+            params: { characterId: 'test-1' },
+            query: { userId: 'test-user' }
+        };
         const res = {
             json: jest.fn(),
             status: jest.fn().mockReturnThis()
@@ -344,25 +364,220 @@ describe('CharactersRoutes API', () => {
         );
     });
 
-    it('should set CORS headers', () => {
-        const mockServiceFactory = createServiceFactory({});
-        const CharactersRoutes = require('../../backend/api/charactersRoutes');
-        const charactersRoutes = new CharactersRoutes(mockServiceFactory);
+    describe('User Isolation', () => {
+        it('should return only user\'s characters in GET /', async () => {
+            const user1Characters = [
+                { id: 'char-1', name: 'User1 Character', user_id: 'user-1' }
+            ];
 
-        const req = { method: 'GET' };
-        const res = {
-            header: jest.fn(),
-            sendStatus: jest.fn()
-        };
-        const next = jest.fn();
+            const mockServiceFactory = createServiceFactory({
+                database: {
+                    getDAL: jest.fn().mockReturnValue({
+                        personalities: {
+                            getUserCharacters: jest.fn().mockResolvedValue(user1Characters)
+                        }
+                    })
+                }
+            });
 
-        // Test CORS middleware (first middleware)
-        const corsHandler = charactersRoutes.router.stack[0];
-        corsHandler.handle(req, res, next);
+            const CharactersRoutes = require('../../backend/api/charactersRoutes');
+            const charactersRoutes = new CharactersRoutes(mockServiceFactory);
 
-        expect(res.header).toHaveBeenCalledWith('Access-Control-Allow-Origin', 'http://localhost:5173');
-        expect(res.header).toHaveBeenCalledWith('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-        expect(res.header).toHaveBeenCalledWith('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-        expect(next).toHaveBeenCalled();
+            const req = { query: { userId: 'user-1' } };
+            const res = {
+                json: jest.fn(),
+                status: jest.fn().mockReturnThis()
+            };
+
+            const getAllHandler = charactersRoutes.router.stack.find(layer => 
+                layer.route && layer.route.path === '/' && layer.route.methods.get
+            );
+
+            await getAllHandler.route.stack[0].handle(req, res);
+
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    success: true,
+                    data: user1Characters
+                })
+            );
+        });
+
+        it('should return 404 when GET /:characterId with wrong user', async () => {
+            const character = { id: 'char-1', name: 'Test', user_id: 'user-1' };
+
+            const mockServiceFactory = createServiceFactory({
+                database: {
+                    getDAL: jest.fn().mockReturnValue({
+                        personalities: {
+                            getCharacter: jest.fn().mockResolvedValue(character)
+                        }
+                    })
+                }
+            });
+
+            const CharactersRoutes = require('../../backend/api/charactersRoutes');
+            const charactersRoutes = new CharactersRoutes(mockServiceFactory);
+
+            const req = { 
+                params: { characterId: 'char-1' },
+                query: { userId: 'user-2' } // Different user
+            };
+            const res = {
+                json: jest.fn(),
+                status: jest.fn().mockReturnThis()
+            };
+
+            const getOneHandler = charactersRoutes.router.stack.find(layer => 
+                layer.route && layer.route.path === '/:characterId' && layer.route.methods.get
+            );
+
+            await getOneHandler.route.stack[0].handle(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'Character not found'
+                })
+            );
+        });
+
+        it('should return 404 when PUT /:characterId with wrong user', async () => {
+            const character = { id: 'char-1', name: 'Test', user_id: 'user-1' };
+
+            const mockServiceFactory = createServiceFactory({
+                database: {
+                    getDAL: jest.fn().mockReturnValue({
+                        personalities: {
+                            getCharacter: jest.fn().mockResolvedValue(character)
+                        }
+                    })
+                }
+            });
+
+            const CharactersRoutes = require('../../backend/api/charactersRoutes');
+            const charactersRoutes = new CharactersRoutes(mockServiceFactory);
+
+            const req = { 
+                params: { characterId: 'char-1' },
+                query: { userId: 'user-2' }, // Different user
+                body: { name: 'Updated' }
+            };
+            const res = {
+                json: jest.fn(),
+                status: jest.fn().mockReturnThis()
+            };
+
+            const updateHandler = charactersRoutes.router.stack.find(layer => 
+                layer.route && layer.route.path === '/:characterId' && layer.route.methods.put
+            );
+
+            await updateHandler.route.stack[0].handle(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'Character not found'
+                })
+            );
+        });
+
+        it('should return 404 when DELETE /:characterId with wrong user', async () => {
+            const character = { id: 'char-1', name: 'Test', user_id: 'user-1' };
+
+            const mockServiceFactory = createServiceFactory({
+                database: {
+                    getDAL: jest.fn().mockReturnValue({
+                        personalities: {
+                            getCharacter: jest.fn().mockResolvedValue(character)
+                        }
+                    })
+                }
+            });
+
+            const CharactersRoutes = require('../../backend/api/charactersRoutes');
+            const charactersRoutes = new CharactersRoutes(mockServiceFactory);
+
+            const req = { 
+                params: { characterId: 'char-1' },
+                query: { userId: 'user-2' } // Different user
+            };
+            const res = {
+                json: jest.fn(),
+                status: jest.fn().mockReturnThis()
+            };
+
+            const deleteHandler = charactersRoutes.router.stack.find(layer => 
+                layer.route && layer.route.path === '/:characterId' && layer.route.methods.delete
+            );
+
+            await deleteHandler.route.stack[0].handle(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'Character not found'
+                })
+            );
+        });
+    });
+
+    describe('Missing userId', () => {
+        it('should return 400 for GET / without userId', async () => {
+            const mockServiceFactory = createServiceFactory({});
+            const CharactersRoutes = require('../../backend/api/charactersRoutes');
+            const charactersRoutes = new CharactersRoutes(mockServiceFactory);
+
+            const req = { 
+                query: {},
+                headers: {} // No userId in query or headers
+            };
+            const res = {
+                json: jest.fn(),
+                status: jest.fn().mockReturnThis()
+            };
+
+            const getAllHandler = charactersRoutes.router.stack.find(layer => 
+                layer.route && layer.route.path === '/' && layer.route.methods.get
+            );
+
+            await getAllHandler.route.stack[0].handle(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'userId required'
+                })
+            );
+        });
+
+        it('should return 400 for POST / without userId', async () => {
+            const mockServiceFactory = createServiceFactory({});
+            const CharactersRoutes = require('../../backend/api/charactersRoutes');
+            const charactersRoutes = new CharactersRoutes(mockServiceFactory);
+
+            const req = { 
+                query: {},
+                headers: {}, // No userId in query or headers
+                body: { name: 'Test' }
+            };
+            const res = {
+                json: jest.fn(),
+                status: jest.fn().mockReturnThis()
+            };
+
+            const createHandler = charactersRoutes.router.stack.find(layer => 
+                layer.route && layer.route.path === '/' && layer.route.methods.post
+            );
+
+            await createHandler.route.stack[0].handle(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'userId required'
+                })
+            );
+        });
     });
 });
