@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ChatProvider, useChatContext } from './contexts/ChatContext';
+import { AuthProvider } from './contexts/AuthContext';
 import Navigation from './components/Layout/Navigation';
 import ChatPage from './components/Chat/ChatPage';
 import CharactersPage from './components/Characters/CharactersPage';
 import SettingsPage from './components/Settings/SettingsPage';
+import LoginPage from './components/Auth/LoginPage';
+import RegisterPage from './components/Auth/RegisterPage';
+import ProtectedRoute from './components/Auth/ProtectedRoute';
 import { API_BASE_URL } from './config/api';
 
 const AppContent: React.FC = () => {
@@ -57,9 +61,21 @@ const AppContent: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col md:pt-0 pt-[57px]">
         <Routes>
-          <Route path="/" element={<ChatPage />} />
-          <Route path="/characters" element={<CharactersPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/" element={
+            <ProtectedRoute>
+              <ChatPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/characters" element={
+            <ProtectedRoute>
+              <CharactersPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/settings" element={
+            <ProtectedRoute>
+              <SettingsPage />
+            </ProtectedRoute>
+          } />
         </Routes>
       </div>
     </div>
@@ -102,15 +118,26 @@ function App() {
 
   return (
     <Router>
-      <ChatProvider>
-        {isRefreshingModels && (
-          <div className="fixed top-4 right-4 z-50 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2">
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            <span className="text-sm">Refreshing models...</span>
-          </div>
-        )}
-        <AppContent />
-      </ChatProvider>
+      <AuthProvider>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          
+          {/* Protected routes */}
+          <Route path="/*" element={
+            <ChatProvider>
+              {isRefreshingModels && (
+                <div className="fixed top-4 right-4 z-50 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-sm">Refreshing models...</span>
+                </div>
+              )}
+              <AppContent />
+            </ChatProvider>
+          } />
+        </Routes>
+      </AuthProvider>
     </Router>
   );
 }
