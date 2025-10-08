@@ -9,17 +9,7 @@ class CharactersRoutes {
     }
 
     setupRoutes() {
-        // Enable CORS for frontend
-        this.router.use((req, res, next) => {
-            res.header('Access-Control-Allow-Origin', 'http://localhost:5173');
-            res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-            res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-            if (req.method === 'OPTIONS') {
-                res.sendStatus(200);
-            } else {
-                next();
-            }
-        });
+        // CORS is handled by main server middleware - no need for duplicate headers
 
         // Get all available characters (global personalities)
         this.router.get('/', async (req, res) => {
@@ -175,18 +165,24 @@ class CharactersRoutes {
         this.router.delete('/:characterId', async (req, res) => {
             try {
                 const { characterId } = req.params;
+                console.log(`🗑️  Delete request for character: ${characterId}`);
+                
                 const databaseService = this.serviceFactory.get('database');
                 
                 // Check if character exists
                 const existingCharacter = await databaseService.getDAL().personalities.getCharacter(characterId);
                 if (!existingCharacter) {
+                    console.log(`⚠️  Character not found: ${characterId}`);
                     return res.status(404).json({ 
+                        success: false,
                         error: 'Character not found' 
                     });
                 }
                 
+                console.log(`✅ Deleting character: ${existingCharacter.name} (${characterId})`);
                 const result = await databaseService.getDAL().personalities.deleteCharacter(characterId);
                 
+                console.log(`✅ Character deleted successfully: ${characterId}`);
                 res.json({
                     success: true,
                     data: result,
@@ -194,8 +190,10 @@ class CharactersRoutes {
                 });
 
             } catch (error) {
-                console.error('Character Delete API Error:', error);
+                console.error('❌ Character Delete API Error:', error);
+                console.error('Error stack:', error.stack);
                 res.status(500).json({ 
+                    success: false,
                     error: 'Failed to delete character', 
                     details: error.message 
                 });
@@ -358,8 +356,10 @@ class CharactersRoutes {
                 });
 
             } catch (error) {
-                console.error('Character Import API Error:', error);
+                console.error('❌ Character Import API Error:', error);
+                console.error('Error stack:', error.stack);
                 res.status(500).json({ 
+                    success: false,
                     error: 'Failed to import character', 
                     details: error.message 
                 });

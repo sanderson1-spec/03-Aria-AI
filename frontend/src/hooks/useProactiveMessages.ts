@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Message } from '../types';
+import { API_BASE_URL } from '../config/api';
 
 interface ProactiveMessageEvent {
   type: 'connected' | 'proactive-message' | 'heartbeat' | 'error';
@@ -71,7 +72,7 @@ export const useProactiveMessages = ({
 
     try {
       const eventSource = new EventSource(
-        `http://localhost:3001/api/chat/proactive/${sessionId}`,
+        `${API_BASE_URL}/api/chat/proactive/${sessionId}`,
         {
           withCredentials: false
         }

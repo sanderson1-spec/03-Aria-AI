@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { API_BASE_URL } from '../../config/api';
 import type { PsychologyState } from '../../types';
 
 interface CollapsiblePsychologySectionProps {
@@ -43,7 +44,7 @@ export const CollapsiblePsychologySection: React.FC<CollapsiblePsychologySection
     
     setIsLoading(true);
     try {
-      const response = await fetch(`http://localhost:3001/api/chat/psychology/${sessionId}`);
+      const response = await fetch(`${API_BASE_URL}/api/chat/psychology/${sessionId}`);
       const data = await response.json();
       
       if (data.success) {
