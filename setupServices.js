@@ -43,6 +43,8 @@ const ProactiveIntelligenceService = require('./backend/services/domain/CORE_Pro
 const ProactiveLearningService = require('./backend/services/domain/CORE_ProactiveLearningService');
 const ProactiveDeliveryService = require('./backend/services/domain/ProactiveDeliveryService');
 const BackgroundAnalysisService = require('./backend/services/domain/BackgroundAnalysisService');
+const ContextBuilderService = require('./backend/services/domain/CORE_ContextBuilderService');
+const MemorySearchService = require('./backend/services/domain/CORE_MemorySearchService');
 
 // Repository Classes
 const ChatRepository = require('./backend/dal/repositories/CORE_ChatRepository');
@@ -216,6 +218,7 @@ class DatabaseService {
             auth: this.repositories.get('auth'),
             chats: this.repositories.get('chats'),
             conversations: this.repositories.get('conversations'),
+            conversationLogs: this.repositories.get('conversations'),  // Alias for conversation operations
             personalities: this.repositories.get('personalities'),
             sessions: this.repositories.get('sessions'),
             psychology: this.repositories.get('psychology'),
@@ -231,7 +234,8 @@ class DatabaseService {
             characterPsychologicalFrameworks: this.repositories.get('psychology'),
             characterPsychologicalState: this.repositories.get('psychology'),
             psychologyEvolutionLog: this.repositories.get('psychology'),
-            characterMemoryWeights: this.repositories.get('conversations'),  // Memory weights handled by conversations
+            characterMemoryWeights: this.repositories.get('psychology'),
+            memories: this.repositories.get('psychology'),  // Memory operations (weights, search) handled by psychology repository
             
             // Proactive-related table access through proactive repository
             proactiveEngagements: this.repositories.get('proactive'),
@@ -420,6 +424,16 @@ async function setupServices(config = {}) {
         serviceFactory.registerService('backgroundAnalysis', BackgroundAnalysisService, [
             'database', 'logger', 'psychology', 'conversationAnalyzer', 'proactiveIntelligence', 
             'proactiveDelivery', 'proactiveLearning'
+        ]);
+
+        // Context Builder Service - Builds unified context for LLM conversations
+        serviceFactory.registerService('contextBuilder', ContextBuilderService, [
+            'database', 'logger', 'errorHandling', 'llmConfig', 'psychology'
+        ]);
+
+        // Memory Search Service - Intelligent deep memory search with LLM-based intent analysis
+        serviceFactory.registerService('memorySearch', MemorySearchService, [
+            'database', 'logger', 'errorHandling', 'structuredResponse'
         ]);
 
         // ===== INITIALIZE ALL SERVICES =====

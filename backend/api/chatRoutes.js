@@ -11,6 +11,36 @@ class ChatRoutes {
         this.setupRoutes();
     }
 
+    // Helper function to format messages for prompt
+    formatMessages(messages) {
+        if (!messages || messages.length === 0) return '(No recent messages)';
+        return messages.map(m => `[${m.sender || m.role}]: ${m.message || m.content}`).join('\n');
+    }
+
+    // Helper function to format memories for prompt
+    formatMemories(memories) {
+        if (!memories || memories.length === 0) return '(No significant memories)';
+        return memories.map(m => `- ${m.content || m.message} (significance: ${m.total_significance || 'N/A'})`).join('\n');
+    }
+
+    // Helper function to format commitments for prompt
+    formatCommitments(commitments) {
+        if (!commitments || commitments.length === 0) return '(No active commitments)';
+        return commitments.map(c => `- ${c.title || c.description} (status: ${c.status})`).join('\n');
+    }
+
+    // Helper function to format events for prompt
+    formatEvents(events) {
+        if (!events || events.length === 0) return '(No upcoming events)';
+        return events.map(e => `- ${e.title} (scheduled: ${e.scheduled_at})`).join('\n');
+    }
+
+    // Helper function to format completions for prompt
+    formatCompletions(completions) {
+        if (!completions || completions.length === 0) return '(No recent completions)';
+        return completions.map(c => `- ${c.title} (${c.type}, completed: ${c.completed_at || c.updated_at})`).join('\n');
+    }
+
     setupRoutes() {
         // CORS is handled by main server middleware
 
@@ -125,6 +155,8 @@ class ChatRoutes {
                 const psychologyService = this.serviceFactory.get('psychology');
                 const conversationService = this.serviceFactory.get('conversationAnalyzer');
                 const databaseService = this.serviceFactory.get('database');
+                const contextBuilder = this.serviceFactory.get('contextBuilder');
+                const memorySearch = this.serviceFactory.get('memorySearch');
 
                 // Create or get session
                 const actualSessionId = sessionId || uuidv4();
@@ -155,16 +187,54 @@ class ChatRoutes {
                     psychologyState = await psychologyService.initializeCharacterState(userId, characterId);
                 }
 
-                // Prepare context for LLM with character-specific information
+                // Build unified context (includes recent messages, psychology, memories, commitments, events)
+                const context = await contextBuilder.buildUnifiedContext(userId, actualSessionId, characterId);
+
+                // Get recent message IDs for exclusion in deep search
+                const recentMessageIds = context.recentMessages.map(m => m.id).filter(id => id);
+                
+                // Execute deep memory search (significance threshold from config, default 7)
+                const significanceThreshold = 7;
+                const deepMemories = await memorySearch.executeDeepSearch(
+                    actualSessionId, 
+                    message, 
+                    recentMessageIds, 
+                    significanceThreshold
+                );
+
+                // Prepare comprehensive context for LLM
                 const characterBackground = character.definition || '';
                 const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
+                
                 const systemPrompt = `You are ${character.name}, ${character.description}
 ${characterBackground ? `\nBackground: ${characterBackground}` : ''}
 
 ${dateTimeContext}
 
-Current psychology state: mood=${psychologyState.mood || 'neutral'}, engagement=${psychologyState.engagement || 'moderate'}, energy=${psychologyState.energy || 75}.
-Stay in character as ${character.name}. Adapt your response based on this psychological context and your character traits. You are fully aware of the current date and time as provided above.`;
+RECENT CONVERSATION (last ${context.recentMessages.length} messages):
+${this.formatMessages(context.recentMessages)}
+
+YOUR PSYCHOLOGICAL STATE:
+- Mood: ${context.psychologyState?.current_emotion || 'neutral'}
+- Energy: ${context.psychologyState?.energy_level || 5}/10
+- Relationship: ${context.psychologyState?.relationship_dynamic || 'developing'}
+
+TOP MEMORIES:
+${this.formatMemories(context.topMemories)}
+
+${deepMemories && deepMemories.length > 0 ? `RELEVANT PAST MEMORIES:
+${this.formatMemories(deepMemories)}
+` : ''}
+ACTIVE COMMITMENTS:
+${this.formatCommitments(context.activeCommitments)}
+
+UPCOMING EVENTS:
+${this.formatEvents(context.upcomingEvents)}
+
+RECENT COMPLETIONS:
+${this.formatCompletions(context.recentCompletions)}
+
+Stay in character as ${character.name}. You have complete awareness of all this context.`;
 
                 // Generate AI response using LLM service (convert to string format)
                 const fullPrompt = `${systemPrompt}\n\nUser: ${message}\n${character.name}:`;
@@ -187,7 +257,11 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                         aiResponse: aiResponse.content || aiResponse,
                         psychologyState: psychologyState, // Send current state immediately
                         userMessageId,
-                        aiMessageId
+                        aiMessageId,
+                        contextInfo: {
+                            deepSearchTriggered: deepMemories && deepMemories.length > 0,
+                            memoriesFound: deepMemories ? deepMemories.length : 0
+                        }
                     }
                 });
 

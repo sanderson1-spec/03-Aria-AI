@@ -10,9 +10,9 @@ export async function authenticatedFetch(
 ): Promise<Response> {
   const token = sessionToken || localStorage.getItem('aria-session-token');
   
-  const headers = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...(options.headers as Record<string, string> || {}),
   };
 
   if (token) {

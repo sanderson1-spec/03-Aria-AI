@@ -32,13 +32,20 @@ class CORE_LLMConfigService extends AbstractService {
                 throw new Error(`Invalid role: ${role}. Must be 'conversational' or 'analytical'`);
             }
             
+            // Get global context window for fallback
+            const globalContextWindow = await this.getGlobalContextWindow(role);
+            
             if (role === 'conversational') {
                 // Conversational cascade: character → user → global
                 if (characterId) {
                     const charPrefs = await this.getCharacterLLMPreferences(characterId);
                     if (charPrefs && charPrefs.conversational) {
                         this.logger.debug('Resolved conversational model from character preferences', 'LLMConfig', { userId, characterId });
-                        return charPrefs.conversational;
+                        // Add context_window_messages if not present
+                        return {
+                            ...charPrefs.conversational,
+                            context_window_messages: charPrefs.conversational.context_window_messages || globalContextWindow
+                        };
                     }
                 }
                 
@@ -46,25 +53,39 @@ class CORE_LLMConfigService extends AbstractService {
                 const userPrefs = await this.getUserLLMPreferences(userId);
                 if (userPrefs && userPrefs.conversational) {
                     this.logger.debug('Resolved conversational model from user preferences', 'LLMConfig', { userId });
-                    return userPrefs.conversational;
+                    // Add context_window_messages if not present
+                    return {
+                        ...userPrefs.conversational,
+                        context_window_messages: userPrefs.conversational.context_window_messages || globalContextWindow
+                    };
                 }
                 
                 // Fall back to global default
                 const globalConfig = await this.getGlobalLLMConfig(role);
                 this.logger.debug('Resolved conversational model from global config', 'LLMConfig', { userId });
-                return globalConfig;
+                return {
+                    ...globalConfig,
+                    context_window_messages: globalConfig.context_window_messages || globalContextWindow
+                };
             } else {
                 // Analytical cascade: user → global (no character override)
                 const userPrefs = await this.getUserLLMPreferences(userId);
                 if (userPrefs && userPrefs.analytical) {
                     this.logger.debug('Resolved analytical model from user preferences', 'LLMConfig', { userId });
-                    return userPrefs.analytical;
+                    // Add context_window_messages if not present
+                    return {
+                        ...userPrefs.analytical,
+                        context_window_messages: userPrefs.analytical.context_window_messages || globalContextWindow
+                    };
                 }
                 
                 // Fall back to global default
                 const globalConfig = await this.getGlobalLLMConfig(role);
                 this.logger.debug('Resolved analytical model from global config', 'LLMConfig', { userId });
-                return globalConfig;
+                return {
+                    ...globalConfig,
+                    context_window_messages: globalConfig.context_window_messages || globalContextWindow
+                };
             }
         } catch (error) {
             throw this.errorHandler.wrapDomainError(error, 'Failed to resolve model config', { userId, characterId, role });
@@ -177,6 +198,33 @@ class CORE_LLMConfigService extends AbstractService {
     }
     
     /**
+     * Gets global context window configuration
+     * @param {string} role - 'conversational' or 'analytical'
+     * @returns {Promise<number>} Context window size (default 30)
+     */
+    async getGlobalContextWindow(role) {
+        try {
+            const configKey = role === 'conversational' 
+                ? 'llm_conversational_context_window' 
+                : 'llm_analytical_context_window';
+            
+            const value = await this.dal.configuration.getConfigValue(configKey);
+            
+            if (!value) {
+                return 30; // Default context window
+            }
+            
+            // Parse as integer if it's a string
+            const contextWindow = typeof value === 'string' ? parseInt(value, 10) : value;
+            
+            return contextWindow || 30;
+        } catch (error) {
+            // Silently default to 30 on error
+            return 30;
+        }
+    }
+    
+    /**
      * Sets global LLM configuration
      * @param {string} key - Configuration key
      * @param {any} value - Configuration value
@@ -187,6 +235,50 @@ class CORE_LLMConfigService extends AbstractService {
             this.logger.info('Updated global LLM config', 'LLMConfig', { key });
         } catch (error) {
             throw this.errorHandler.wrapDomainError(error, 'Failed to set global LLM config', { key });
+        }
+    }
+    
+    /**
+     * Gets character preferences (alias for getCharacterLLMPreferences)
+     * Used by ContextBuilderService
+     * @param {number} characterId - The character ID
+     * @returns {Promise<Object|null>} Character's preferences
+     */
+    async getCharacterPreferences(characterId) {
+        return await this.getCharacterLLMPreferences(characterId);
+    }
+    
+    /**
+     * Gets user preferences (alias for getUserLLMPreferences)
+     * Used by ContextBuilderService
+     * @param {number} userId - The user ID
+     * @returns {Promise<Object|null>} User's preferences
+     */
+    async getUserPreferences(userId) {
+        return await this.getUserLLMPreferences(userId);
+    }
+    
+    /**
+     * Gets global config (simplified version for ContextBuilderService)
+     * @returns {Promise<Object>} Global configuration with context window
+     */
+    async getGlobalConfig() {
+        try {
+            const conversationalConfig = await this.getGlobalLLMConfig('conversational');
+            const contextWindow = await this.getGlobalContextWindow('conversational');
+            
+            return {
+                ...conversationalConfig,
+                context_window_messages: contextWindow
+            };
+        } catch (error) {
+            this.logger.warn('Error getting global config, using defaults', 'LLMConfig', { error: error.message });
+            return {
+                model: process.env.LLM_MODEL || 'meta-llama-3.1-8b-instruct',
+                temperature: 0.7,
+                max_tokens: 2048,
+                context_window_messages: 30
+            };
         }
     }
     

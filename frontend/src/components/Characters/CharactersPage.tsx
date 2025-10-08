@@ -17,6 +17,7 @@ interface Character {
       model?: string;
       temperature?: number;
       max_tokens?: number;
+      context_window_messages?: number;
     };
   };
 }
@@ -424,6 +425,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
   const [customModel, setCustomModel] = useState('');
   const [customTemperature, setCustomTemperature] = useState(0.7);
   const [customMaxTokens, setCustomMaxTokens] = useState(2000);
+  const [customContextWindow, setCustomContextWindow] = useState(30);
 
   useEffect(() => {
     if (character) {
@@ -440,12 +442,14 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
         setCustomModel(character.llm_preferences.conversational.model || '');
         setCustomTemperature(character.llm_preferences.conversational.temperature ?? 0.7);
         setCustomMaxTokens(character.llm_preferences.conversational.max_tokens ?? 2000);
+        setCustomContextWindow(character.llm_preferences.conversational.context_window_messages ?? 30);
       } else {
         // Reset LLM preferences if character doesn't have them
         setUseCustomModel(false);
         setCustomModel('');
         setCustomTemperature(0.7);
         setCustomMaxTokens(2000);
+        setCustomContextWindow(30);
       }
     } else {
       // Reset all form data for new character
@@ -459,6 +463,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
       setCustomModel('');
       setCustomTemperature(0.7);
       setCustomMaxTokens(2000);
+      setCustomContextWindow(30);
     }
     
     // Load available models
@@ -504,7 +509,8 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
           conversational: {
             model: customModel,
             temperature: customTemperature,
-            max_tokens: customMaxTokens
+            max_tokens: customMaxTokens,
+            context_window_messages: customContextWindow
           }
         };
       } else {
@@ -698,6 +704,24 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Maximum response length (100-8000)
+                  </p>
+                </div>
+
+                {/* Context Window */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Context Window (messages)
+                  </label>
+                  <input
+                    type="number"
+                    value={customContextWindow}
+                    onChange={(e) => setCustomContextWindow(parseInt(e.target.value) || 30)}
+                    min="10"
+                    max="100"
+                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Override global context window for this character
                   </p>
                 </div>
               </div>

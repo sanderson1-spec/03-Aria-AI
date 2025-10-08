@@ -10,11 +10,13 @@ interface LLMConfig {
     model?: string;
     temperature?: number;
     max_tokens?: number;
+    context_window_messages?: number;
   };
   analytical?: {
     model?: string;
     temperature?: number;
     max_tokens?: number;
+    context_window_messages?: number;
   };
 }
 
@@ -36,10 +38,12 @@ const LLMSettingsPage: React.FC = () => {
   const [conversationalModel, setConversationalModel] = useState('');
   const [conversationalTemp, setConversationalTemp] = useState(0.7);
   const [conversationalMaxTokens, setConversationalMaxTokens] = useState(2000);
+  const [conversationalContextWindow, setConversationalContextWindow] = useState(30);
   
   const [analyticalModel, setAnalyticalModel] = useState('');
   const [analyticalTemp, setAnalyticalTemp] = useState(0.1);
   const [analyticalMaxTokens, setAnalyticalMaxTokens] = useState(4000);
+  const [analyticalContextWindow, setAnalyticalContextWindow] = useState(30);
   
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
@@ -61,10 +65,12 @@ const LLMSettingsPage: React.FC = () => {
           setConversationalModel(config.user.conversational.model || '');
           setConversationalTemp(config.user.conversational.temperature ?? 0.7);
           setConversationalMaxTokens(config.user.conversational.max_tokens ?? 2000);
+          setConversationalContextWindow(config.user.conversational.context_window_messages ?? 30);
         } else if (config.global?.conversational) {
           setConversationalModel(config.global.conversational.model || '');
           setConversationalTemp(config.global.conversational.temperature ?? 0.7);
           setConversationalMaxTokens(config.global.conversational.max_tokens ?? 2000);
+          setConversationalContextWindow(config.global.conversational.context_window_messages ?? 30);
         }
         
         // Load analytical settings
@@ -72,10 +78,12 @@ const LLMSettingsPage: React.FC = () => {
           setAnalyticalModel(config.user.analytical.model || '');
           setAnalyticalTemp(config.user.analytical.temperature ?? 0.1);
           setAnalyticalMaxTokens(config.user.analytical.max_tokens ?? 4000);
+          setAnalyticalContextWindow(config.user.analytical.context_window_messages ?? 30);
         } else if (config.global?.analytical) {
           setAnalyticalModel(config.global.analytical.model || '');
           setAnalyticalTemp(config.global.analytical.temperature ?? 0.1);
           setAnalyticalMaxTokens(config.global.analytical.max_tokens ?? 4000);
+          setAnalyticalContextWindow(config.global.analytical.context_window_messages ?? 30);
         }
       } else {
         throw new Error(data.error || 'Failed to load configuration');
@@ -117,12 +125,14 @@ const LLMSettingsPage: React.FC = () => {
         conversational: {
           model: conversationalModel,
           temperature: conversationalTemp,
-          max_tokens: conversationalMaxTokens
+          max_tokens: conversationalMaxTokens,
+          context_window_messages: conversationalContextWindow
         },
         analytical: {
           model: analyticalModel,
           temperature: analyticalTemp,
-          max_tokens: analyticalMaxTokens
+          max_tokens: analyticalMaxTokens,
+          context_window_messages: analyticalContextWindow
         }
       };
 
@@ -353,6 +363,24 @@ const LLMSettingsPage: React.FC = () => {
                 Maximum length of generated responses (100-8000)
               </p>
             </div>
+
+            {/* Context Window */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Context Window (messages)
+              </label>
+              <input
+                type="number"
+                value={conversationalContextWindow}
+                onChange={(e) => setConversationalContextWindow(parseInt(e.target.value) || 30)}
+                min="10"
+                max="100"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Number of recent messages character can see. Larger models support more.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -421,6 +449,24 @@ const LLMSettingsPage: React.FC = () => {
               />
               <p className="text-xs text-gray-500 mt-1">
                 Maximum length for analysis results (100-8000)
+              </p>
+            </div>
+
+            {/* Context Window */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Context Window (messages)
+              </label>
+              <input
+                type="number"
+                value={analyticalContextWindow}
+                onChange={(e) => setAnalyticalContextWindow(parseInt(e.target.value) || 30)}
+                min="10"
+                max="100"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Number of recent messages character can see. Larger models support more.
               </p>
             </div>
           </div>
