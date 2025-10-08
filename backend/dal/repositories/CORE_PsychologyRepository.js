@@ -581,10 +581,21 @@ class PsychologyRepository extends BaseRepository {
             'log psychology evolution'
         );
 
+        // Get userId from session
+        const session = await this.dal.queryOne(
+            'SELECT user_id FROM sessions WHERE id = ?',
+            [sessionId]
+        );
+        
+        if (!session || !session.user_id) {
+            throw new Error(`Cannot log psychology evolution: session ${sessionId} not found or has no user_id`);
+        }
+
         const evolutionLog = {
             id: this.generateId(),
             session_id: sessionId,
             personality_id: personalityId,
+            user_id: session.user_id,
             previous_state: JSON.stringify(evolutionData.previous_state || {}),
             new_state: JSON.stringify(evolutionData.new_state || {}),
             trigger_message: evolutionData.trigger_message || '',
@@ -597,16 +608,17 @@ class PsychologyRepository extends BaseRepository {
 
         const sql = `
             INSERT INTO psychology_evolution_log (
-                id, session_id, personality_id, previous_state, new_state,
+                id, session_id, personality_id, user_id, previous_state, new_state,
                 trigger_message, analysis_reasoning, emotional_shift_magnitude,
                 motivation_stability, relationship_progression, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const result = await this.dal.query(sql, [
             evolutionLog.id,
             evolutionLog.session_id,
             evolutionLog.personality_id,
+            evolutionLog.user_id,
             evolutionLog.previous_state,
             evolutionLog.new_state,
             evolutionLog.trigger_message,

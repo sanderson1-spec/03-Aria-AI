@@ -28,6 +28,7 @@ const DataAccessLayer = require('./backend/dal/CORE_DataAccessLayer');
 const MessageDeliveryService = require('./backend/services/infrastructure/CORE_MessageDeliveryService');
 const SchedulingService = require('./backend/services/infrastructure/CORE_SchedulingService');
 const LLMConfigService = require('./backend/services/infrastructure/CORE_LLMConfigService');
+const EventSchedulerService = require('./backend/services/infrastructure/CORE_EventSchedulerService');
 
 // Intelligence Services  
 const LLMService = require('./backend/services/intelligence/CORE_LLMService');
@@ -56,6 +57,7 @@ const AnalyticsRepository = require('./backend/dal/repositories/CORE_AnalyticsRe
 const ConfigurationRepository = require('./backend/dal/repositories/CORE_ConfigurationRepository');
 const SchemaRepository = require('./backend/dal/repositories/CORE_SchemaRepository');
 const CommitmentsRepository = require('./backend/dal/repositories/CORE_CommitmentsRepository');
+const EventsRepository = require('./backend/dal/repositories/CORE_EventsRepository');
 
 /**
  * Database Service - Infrastructure Layer
@@ -155,6 +157,7 @@ class DatabaseService {
             // Proactive intelligence repositories
             { name: 'proactive', class: ProactiveRepository, table: 'proactive_engagements' },
             { name: 'commitments', class: CommitmentsRepository, table: 'commitments' },
+            { name: 'events', class: EventsRepository, table: 'events' },
             // Configuration and analytics
             { name: 'configuration', class: ConfigurationRepository, table: 'configuration' },
             { name: 'analytics', class: AnalyticsRepository, table: 'analytics_data' },
@@ -214,6 +217,7 @@ class DatabaseService {
             psychology: this.repositories.get('psychology'),
             proactive: this.repositories.get('proactive'),
             commitments: this.repositories.get('commitments'),
+            events: this.repositories.get('events'),
             configuration: this.repositories.get('configuration'),
             analytics: this.repositories.get('analytics'),
             schema: this.repositories.get('schema'),
@@ -358,6 +362,14 @@ async function setupServices(config = {}) {
             'logger',
             'errorHandling',
             'messageDelivery'
+        ]);
+
+        // Event Scheduler Service - Polls and triggers scheduled events
+        serviceFactory.registerService('eventScheduler', EventSchedulerService, [
+            'database',
+            'logger',
+            'errorHandling',
+            'proactiveIntelligence'
         ]);
 
         // ===== DOMAIN LAYER =====

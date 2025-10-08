@@ -684,7 +684,7 @@ class ConversationRepository extends BaseRepository {
      */
     async getChatById(chatId) {
         const sql = `SELECT * FROM chats WHERE id = ?`;
-        return await super.queryOne(sql, [chatId]);
+        return await this.dal.queryOne(sql, [chatId]);
     }
 
     /**
@@ -693,7 +693,7 @@ class ConversationRepository extends BaseRepository {
      */
     async findChatsWithPersonality(personalityId, limit = 5) {
         const sql = `SELECT * FROM chats WHERE personality_id = ? ORDER BY updated_at DESC LIMIT ?`;
-        return await super.query(sql, [personalityId, limit]);
+        return await this.dal.query(sql, [personalityId, limit]);
     }
 
     /**
@@ -701,31 +701,29 @@ class ConversationRepository extends BaseRepository {
      * Replaces database.js deleteChat method
      */
     async deleteChat(chatId) {
-        return await super.executeInTransaction(async () => {
-            // Delete conversation logs
-            const messagesResult = await super.query(
-                `DELETE FROM conversation_logs WHERE session_id = ?`, 
-                [chatId]
-            );
-            
-            // Delete memory weights
-            await super.query(
-                `DELETE FROM character_memory_weights WHERE session_id = ?`, 
-                [chatId]
-            );
-            
-            // Delete the chat
-            const chatResult = await super.query(
-                `DELETE FROM chats WHERE id = ?`, 
-                [chatId]
-            );
-            
-            return {
-                chatDeleted: chatResult.changes > 0,
-                messagesDeleted: messagesResult.changes,
-                success: chatResult.changes > 0
-            };
-        });
+        // Delete conversation logs
+        const messagesResult = await this.dal.execute(
+            `DELETE FROM conversation_logs WHERE session_id = ?`, 
+            [chatId]
+        );
+        
+        // Delete memory weights
+        await this.dal.execute(
+            `DELETE FROM character_memory_weights WHERE session_id = ?`, 
+            [chatId]
+        );
+
+        // Delete the chat
+        const chatResult = await this.dal.execute(
+            `DELETE FROM chats WHERE id = ?`, 
+            [chatId]
+        );
+        
+        return {
+            chatDeleted: chatResult.changes > 0,
+            messagesDeleted: messagesResult.changes,
+            success: chatResult.changes > 0
+        };
     }
 
     /**

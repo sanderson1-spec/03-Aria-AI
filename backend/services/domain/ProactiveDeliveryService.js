@@ -336,9 +336,9 @@ class ProactiveDeliveryService extends AbstractService {
             
             const scheduledMessages = Array.from(this.scheduledMessages.entries()).map(([id, data]) => ({
                 scheduleId: id,
-                sessionId: data.messageData.sessionId,
+                sessionId: data.messageData?.sessionId || 'unknown',
                 scheduledAt: data.scheduledAt,
-                content: data.messageData.content.substring(0, 50) + '...'
+                content: (data.messageData?.content || '').substring(0, 50) + '...'
             }));
 
             return {

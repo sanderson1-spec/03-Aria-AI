@@ -393,22 +393,91 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
 
                 // Handle client disconnect
                 req.on('close', () => {
-                    console.log(`Proactive SSE connection closed for session ${sessionId}`);
+                    if (this.logger && this.logger.debug) {
+                        this.logger.debug(`Proactive SSE connection closed for session ${sessionId}`, 'ChatRoutes');
+                    }
                     clearInterval(heartbeatInterval);
                     cleanup();
                 });
 
                 req.on('error', (error) => {
-                    console.error(`Proactive SSE connection error for session ${sessionId}:`, error);
+                    // ECONNRESET is normal when client disconnects
+                    if (error.code === 'ECONNRESET' || error.message === 'aborted') {
+                        if (this.logger && this.logger.debug) {
+                            this.logger.debug(`Proactive SSE client disconnected: ${sessionId}`, 'ChatRoutes');
+                        }
+                    } else {
+                        if (this.logger && this.logger.error) {
+                            this.logger.error(`Proactive SSE connection error for session ${sessionId}`, 'ChatRoutes', {
+                                error: error.message,
+                                code: error.code
+                            });
+                        }
+                    }
                     clearInterval(heartbeatInterval);
                     cleanup();
                 });
 
             } catch (error) {
-                console.error('Proactive SSE API Error:', error);
+                this.logger.error('Proactive SSE API Error', 'ChatRoutes', {
+                    error: error.message,
+                    sessionId
+                });
                 res.status(500).json({ 
                     error: 'Failed to establish proactive message stream', 
                     details: error.message 
+                });
+            }
+        });
+
+        // DELETE /:chatId - Delete a chat
+        this.router.delete('/:chatId', async (req, res) => {
+            try {
+                const { chatId } = req.params;
+                const { userId } = req.query;
+
+                if (!userId) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Missing required parameter: userId'
+                    });
+                }
+
+                const databaseService = this.serviceFactory.get('database');
+                const dal = databaseService.getDAL();
+
+                // Verify chat belongs to user (user isolation)
+                const chat = await dal.conversations.getChatById(chatId);
+
+                if (!chat) {
+                    return res.status(404).json({
+                        success: false,
+                        error: 'Chat not found'
+                    });
+                }
+
+                if (chat.user_id !== userId) {
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Access denied: This chat does not belong to you'
+                    });
+                }
+
+                // Delete chat (cascades to conversations, commitments, events, psychology state via foreign keys)
+                const result = await dal.conversations.deleteChat(chatId);
+
+                res.json({
+                    success: true,
+                    message: 'Chat deleted successfully',
+                    data: result
+                });
+
+            } catch (error) {
+                console.error('Delete Chat API Error:', error);
+                res.status(500).json({
+                    success: false,
+                    error: 'Failed to delete chat',
+                    details: error.message
                 });
             }
         });

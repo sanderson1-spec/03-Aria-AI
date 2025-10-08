@@ -51,7 +51,7 @@ Characters receive:
 
 Example output:
 ```
-Current date and time: Monday, September 8, 2025 at 09:50 AM GMT+2
+Current date and time: Monday, September 8, 2025 at 09:50 AM
 Current UTC time: 2025-09-08T07:50:12.768Z
 Current timestamp: 1757317812768
 Local date: 2025-09-08

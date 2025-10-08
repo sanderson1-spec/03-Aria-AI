@@ -135,6 +135,22 @@ class ProactiveIntelligenceService extends AbstractService {
                 decision.commitment_detected = null;
             }
             
+            // Detect events in the conversation
+            this.logger.info('Running event detection', 'ProactiveIntelligence');
+            const eventDetection = await this.detectEvent(analysisContext);
+            
+            if (eventDetection.has_event) {
+                this.logger.info('Event detected', 'ProactiveIntelligence', {
+                    title: eventDetection.event?.title,
+                    recurrenceType: eventDetection.event?.recurrence_type,
+                    confidence: eventDetection.confidence
+                });
+                decision.event_detected = eventDetection;
+            } else {
+                this.logger.debug('No event detected', 'ProactiveIntelligence');
+                decision.event_detected = null;
+            }
+            
             return decision;
             
         } catch (error) {
@@ -727,6 +743,492 @@ Respond with complete JSON following the schema.`;
         }
 
         return result;
+    }
+
+    /**
+     * DOMAIN LAYER: Detect if character scheduled an event or meeting
+     * Uses LLM2 to analyze conversation for scheduled events, check-ins, meetings
+     */
+    async detectEvent(context) {
+        this.logger.info('Analyzing conversation for events', 'ProactiveIntelligence', {
+            characterName: context.personality?.name
+        });
+        
+        try {
+            // Build event detection prompt
+            const prompt = this.buildEventDetectionPrompt(context);
+            
+            // Get event schema
+            const eventSchema = this.getEventDetectionSchema();
+            
+            // Call LLM2 via structured response
+            this.logger.debug('Calling LLM for event detection', 'ProactiveIntelligence');
+            const rawEvent = await this.structuredResponse.generateStructuredResponse(
+                prompt, 
+                eventSchema, 
+                {
+                    temperature: 0.3, // Lower temperature for more precise detection
+                    maxTokens: 800,
+                    timeout: this.config.analysisTimeout
+                }
+            );
+            
+            this.logger.info('Event detection completed', 'ProactiveIntelligence', {
+                hasEvent: rawEvent?.has_event,
+                confidence: rawEvent?.confidence
+            });
+            
+            // Validate and return
+            return this.validateEventDetection(rawEvent);
+            
+        } catch (error) {
+            this.logger.error('Event detection failed', 'ProactiveIntelligence', {
+                error: error.message
+            });
+            return { has_event: false };
+        }
+    }
+
+    /**
+     * DOMAIN LAYER: Build prompt for event detection
+     */
+    buildEventDetectionPrompt({
+        userMessage,
+        agentResponse,
+        conversationHistory,
+        sessionContext
+    }) {
+        const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
+        const characterName = sessionContext.personalityName || 'the character';
+        
+        return `You are analyzing if ${characterName} scheduled an event or meeting.
+
+${dateTimeContext}
+
+LOOK FOR:
+- Recurring check-ins (daily, weekly, monthly, yearly)
+- Scheduled meetings (one-time or recurring)
+- Appointments
+- Regular sessions
+- Birthday or anniversary events
+
+CHARACTER'S MESSAGE: "${agentResponse}"
+USER'S MESSAGE: "${userMessage}"
+
+EXAMPLES:
+- "Let's have a daily check-in at 7am" → recurring event
+- "I'll see you tonight at 8pm" → one-time event
+- "We'll meet every Monday at 3pm" → weekly recurring
+- "We'll meet on the first Monday of every month at 3pm" → monthly recurring
+- "My birthday is on January 1st" → yearly recurring
+- "I'll check in with you tomorrow morning" → one-time event
+
+Also determine if character would want to remind user about this event:
+- Strict/professional characters → likely want reminders
+- Casual/flexible characters → may not remind
+
+EXTRACTION RULES:
+- title: Short descriptive title for the event
+- description: Additional context or details
+- recurrence_type: 'once', 'daily', 'weekly', 'monthly', or 'yearly'
+- recurrence_data: Extract time, day_of_week (for weekly), day_of_month (for monthly)
+- starts_at: ISO timestamp or relative like "tomorrow 7am"
+- reminder_preference: Based on character's personality ('none', 'before_event', 'at_event')
+
+Analyze ONLY ${characterName}'s most recent response for scheduled events.
+
+Respond with strict JSON matching the schema.`;
+    }
+
+    /**
+     * DOMAIN LAYER: Define schema for event detection
+     */
+    getEventDetectionSchema() {
+        return {
+            type: 'object',
+            required: ['has_event', 'confidence'],
+            properties: {
+                has_event: {
+                    type: 'boolean',
+                    description: 'True if character scheduled an event'
+                },
+                confidence: {
+                    type: 'number',
+                    minimum: 0.0,
+                    maximum: 1.0,
+                    description: 'Confidence in event detection (0.0 to 1.0)'
+                },
+                event: {
+                    type: ['object', 'null'],
+                    properties: {
+                        title: {
+                            type: 'string',
+                            description: 'Short descriptive title for the event'
+                        },
+                        description: {
+                            type: 'string',
+                            description: 'Additional context or details about the event'
+                        },
+                        recurrence_type: {
+                            type: 'string',
+                            enum: ['once', 'daily', 'weekly', 'monthly', 'yearly'],
+                            description: 'Type of recurrence for the event'
+                        },
+                        recurrence_data: {
+                            type: 'object',
+                            properties: {
+                                time: {
+                                    type: 'string',
+                                    description: 'Time in HH:MM format'
+                                },
+                                day_of_week: {
+                                    type: 'string',
+                                    description: 'Day of week for weekly events (e.g., monday, tuesday)'
+                                },
+                                day_of_month: {
+                                    type: 'number',
+                                    description: 'Day of month for monthly events (1-31)'
+                                }
+                            }
+                        },
+                        starts_at: {
+                            type: 'string',
+                            description: 'ISO timestamp or relative like "tomorrow 7am"'
+                        },
+                        reminder_preference: {
+                            type: 'string',
+                            enum: ['none', 'before_event', 'at_event'],
+                            description: "Character's preference for reminders"
+                        }
+                    },
+                    required: ['title', 'recurrence_type', 'starts_at', 'reminder_preference']
+                }
+            },
+            fallback: {
+                has_event: false,
+                confidence: 0.0,
+                event: null
+            }
+        };
+    }
+
+    /**
+     * DOMAIN LAYER: Validate event detection response
+     */
+    validateEventDetection(rawEvent) {
+        if (!rawEvent || typeof rawEvent !== 'object') {
+            return { has_event: false };
+        }
+
+        const result = {
+            has_event: Boolean(rawEvent.has_event),
+            confidence: typeof rawEvent.confidence === 'number' 
+                ? Math.max(0.0, Math.min(1.0, rawEvent.confidence))
+                : 0.0
+        };
+
+        if (result.has_event && rawEvent.event) {
+            const event = rawEvent.event;
+            const validRecurrenceTypes = ['once', 'daily', 'weekly', 'monthly', 'yearly'];
+            const validReminderPreferences = ['none', 'before_event', 'at_event'];
+            
+            result.event = {
+                title: event.title || 'Scheduled Event',
+                description: event.description || '',
+                recurrence_type: validRecurrenceTypes.includes(event.recurrence_type) 
+                    ? event.recurrence_type 
+                    : 'once',
+                recurrence_data: event.recurrence_data || {},
+                starts_at: event.starts_at || new Date().toISOString(),
+                reminder_preference: validReminderPreferences.includes(event.reminder_preference)
+                    ? event.reminder_preference
+                    : 'none'
+            };
+        }
+
+        return result;
+    }
+
+    /**
+     * INFRASTRUCTURE LAYER: Trigger event notification for EventSchedulerService
+     * Called when a scheduled event is due
+     */
+    async triggerEventNotification(event) {
+        this.logger.info('Triggering event notification', 'ProactiveIntelligence', {
+            eventId: event.id,
+            eventTitle: event.title,
+            userId: event.user_id,
+            chatId: event.chat_id
+        });
+
+        try {
+            // This method is called by EventSchedulerService when an event is due
+            // The actual message delivery happens through the existing proactive messaging system
+            // For now, just log that the event was triggered
+            this.logger.info('Event notification triggered successfully', 'ProactiveIntelligence', {
+                eventId: event.id
+            });
+            
+            return true;
+        } catch (error) {
+            throw this.errorHandler?.wrapDomainError(error, 'Failed to trigger event notification');
+        }
+    }
+
+    /**
+     * DOMAIN LAYER: Handle event reminder decision
+     * Character decides if/when to send reminder based on personality
+     */
+    async handleEventReminder(event) {
+        this.logger.info('Analyzing event reminder decision', 'ProactiveIntelligence', {
+            eventId: event.id,
+            eventTitle: event.title,
+            nextOccurrence: event.next_occurrence
+        });
+
+        try {
+            // Get character and psychology state
+            const character = await this.dal.personalities.findById(event.character_id);
+            const psychologyState = await this.psychologyService.getState(event.user_id, event.chat_id, event.character_id);
+
+            // Calculate time until event
+            const now = new Date();
+            const eventTime = new Date(event.next_occurrence);
+            const minutesUntil = Math.floor((eventTime - now) / 1000 / 60);
+            const timeUntilEvent = this.formatTimeUntil(minutesUntil);
+
+            // Build prompt
+            const prompt = this.buildEventReminderPrompt({
+                character,
+                event,
+                timeUntilEvent,
+                minutesUntil,
+                psychologyState
+            });
+
+            // Get schema
+            const reminderSchema = this.getEventReminderSchema();
+
+            // Call LLM
+            this.logger.debug('Calling LLM for event reminder decision', 'ProactiveIntelligence');
+            const rawDecision = await this.structuredResponse.generateStructuredResponse(
+                prompt,
+                reminderSchema,
+                {
+                    temperature: 0.7, // Higher temperature for personality-driven decisions
+                    maxTokens: 600,
+                    timeout: this.config.analysisTimeout
+                }
+            );
+
+            this.logger.info('Event reminder decision completed', 'ProactiveIntelligence', {
+                shouldRemind: rawDecision?.should_remind,
+                reminderTiming: rawDecision?.reminder_timing
+            });
+
+            return rawDecision;
+
+        } catch (error) {
+            this.logger.error('Event reminder decision failed', 'ProactiveIntelligence', {
+                error: error.message
+            });
+            return { should_remind: false, reminder_timing: 'dont_remind', reminder_message: '' };
+        }
+    }
+
+    /**
+     * DOMAIN LAYER: Build prompt for event reminder decision
+     */
+    buildEventReminderPrompt({ character, event, timeUntilEvent, minutesUntil, psychologyState }) {
+        const psychologyDescription = this.formatPsychologicalState(psychologyState);
+
+        return `You are ${character.name}. You have a scheduled event coming up:
+
+Event: "${event.title}"
+${event.description ? `Description: ${event.description}` : ''}
+Scheduled for: ${event.next_occurrence}
+Time until event: ${timeUntilEvent}
+
+Your psychological state:
+${psychologyDescription}
+
+Should you remind the user about this event?
+Consider your personality:
+- Strict/professional characters might remind in advance
+- Casual/flexible characters might not remind at all
+- Supportive characters might send gentle reminders
+- Strict/professional characters will send urgent/insistent reminders
+
+If yes, when should you remind them?
+- Options: 'now', '5_minutes_before', '15_minutes_before', '30_minutes_before', 'dont_remind'
+
+Current time context: ${minutesUntil} minutes until event
+
+Respond with JSON:
+{
+  "should_remind": boolean,
+  "reminder_timing": "now|5_minutes_before|15_minutes_before|30_minutes_before|dont_remind",
+  "reminder_message": "Your message to user (if reminding)"
+}`;
+    }
+
+    /**
+     * DOMAIN LAYER: Schema for event reminder decision
+     */
+    getEventReminderSchema() {
+        return {
+            type: 'object',
+            required: ['should_remind', 'reminder_timing'],
+            properties: {
+                should_remind: {
+                    type: 'boolean',
+                    description: 'Whether to send a reminder to the user'
+                },
+                reminder_timing: {
+                    type: 'string',
+                    enum: ['now', '5_minutes_before', '15_minutes_before', '30_minutes_before', 'dont_remind'],
+                    description: 'When to send the reminder'
+                },
+                reminder_message: {
+                    type: 'string',
+                    description: 'The message to send (if reminding)'
+                }
+            }
+        };
+    }
+
+    /**
+     * DOMAIN LAYER: Check if event is missed and decide on follow-up
+     * Character decides if user is "late" and how to respond
+     */
+    async checkMissedEvent(event, currentTime) {
+        this.logger.info('Checking missed event', 'ProactiveIntelligence', {
+            eventId: event.id,
+            eventTitle: event.title,
+            scheduledTime: event.next_occurrence,
+            currentTime
+        });
+
+        try {
+            // Get character and psychology state
+            const character = await this.dal.personalities.findById(event.character_id);
+            const psychologyState = await this.psychologyService.getState(event.user_id, event.chat_id, event.character_id);
+
+            // Calculate time since event was supposed to start
+            const scheduled = new Date(event.next_occurrence);
+            const current = new Date(currentTime);
+            const minutesLate = Math.floor((current - scheduled) / 1000 / 60);
+
+            // Build prompt
+            const prompt = this.buildMissedEventPrompt({
+                character,
+                event,
+                currentTime,
+                minutesLate,
+                psychologyState
+            });
+
+            // Get schema
+            const missedEventSchema = this.getMissedEventSchema();
+
+            // Call LLM
+            this.logger.debug('Calling LLM for missed event check', 'ProactiveIntelligence');
+            const rawDecision = await this.structuredResponse.generateStructuredResponse(
+                prompt,
+                missedEventSchema,
+                {
+                    temperature: 0.7, // Higher temperature for personality-driven decisions
+                    maxTokens: 500,
+                    timeout: this.config.analysisTimeout
+                }
+            );
+
+            this.logger.info('Missed event check completed', 'ProactiveIntelligence', {
+                considerMissed: rawDecision?.consider_missed
+            });
+
+            return rawDecision;
+
+        } catch (error) {
+            this.logger.error('Missed event check failed', 'ProactiveIntelligence', {
+                error: error.message
+            });
+            return { consider_missed: false, follow_up_message: '' };
+        }
+    }
+
+    /**
+     * DOMAIN LAYER: Build prompt for missed event check
+     */
+    buildMissedEventPrompt({ character, event, currentTime, minutesLate, psychologyState }) {
+        const psychologyDescription = this.formatPsychologicalState(psychologyState);
+
+        return `Event "${event.title}" was scheduled for ${event.next_occurrence}.
+Current time: ${currentTime}
+User has not responded.
+Time elapsed: ${minutesLate} minutes late
+
+Your personality: ${character.name}
+${psychologyDescription}
+
+Should you check on the user?
+Consider your personality:
+- Strict characters will check after 1-5 minutes
+- Flexible characters might wait 30+ minutes
+- Supportive characters check with concern, not criticism
+
+Respond with JSON:
+{
+  "consider_missed": boolean,
+  "follow_up_message": "Your message (if following up)"
+}`;
+    }
+
+    /**
+     * DOMAIN LAYER: Schema for missed event check
+     */
+    getMissedEventSchema() {
+        return {
+            type: 'object',
+            required: ['consider_missed'],
+            properties: {
+                consider_missed: {
+                    type: 'boolean',
+                    description: 'Whether to consider this event missed and follow up'
+                },
+                follow_up_message: {
+                    type: 'string',
+                    description: 'The follow-up message to send (if following up)'
+                }
+            }
+        };
+    }
+
+    /**
+     * HELPER: Format time until event in human-readable format
+     */
+    formatTimeUntil(minutes) {
+        if (minutes < 0) return 'Event has passed';
+        if (minutes === 0) return 'Event is now';
+        if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        
+        if (hours < 24) {
+            if (remainingMinutes === 0) {
+                return `${hours} hour${hours !== 1 ? 's' : ''}`;
+            }
+            return `${hours} hour${hours !== 1 ? 's' : ''} and ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
+        }
+        
+        const days = Math.floor(hours / 24);
+        const remainingHours = hours % 24;
+        
+        if (remainingHours === 0) {
+            return `${days} day${days !== 1 ? 's' : ''}`;
+        }
+        return `${days} day${days !== 1 ? 's' : ''} and ${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`;
     }
 
     /**

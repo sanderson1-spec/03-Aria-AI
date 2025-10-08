@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatDate } from '../../utils/dateFormatter';
 
 interface Character {
   id: string;
@@ -277,7 +278,7 @@ const CharactersPage: React.FC = () => {
                         </span>
                       </div>
                       <span className="text-xs text-gray-500">
-                        {new Date(character.updated_at).toLocaleDateString()}
+                        {formatDate(character.updated_at)}
                       </span>
                     </div>
 
