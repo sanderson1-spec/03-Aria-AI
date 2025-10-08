@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { formatDate } from '../../utils/dateFormatter';
+import { API_BASE_URL } from '../../config/api';
 
 interface Character {
   id: string;
@@ -40,7 +41,7 @@ const CharactersPage: React.FC = () => {
 
   const loadCharacters = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/characters');
+      const response = await fetch(`${API_BASE_URL}/api/characters`);
       const data = await response.json();
       
       if (data.success) {
@@ -58,30 +59,57 @@ const CharactersPage: React.FC = () => {
 
 
   const deleteCharacter = async (characterId: string) => {
-    if (!confirm('Are you sure you want to delete this character?')) return;
+    console.log('Delete button clicked for character:', characterId);
+    
+    // Find the character name for confirmation
+    const character = characters.find(c => c.id === characterId);
+    const characterName = character?.name || 'this character';
+    
+    console.log('Showing confirmation dialog for:', characterName);
+    
+    // Use window.confirm which should work on all platforms
+    const confirmed = window.confirm(
+      `Delete ${characterName}?\n\nThis action cannot be undone.`
+    );
+    
+    console.log('User confirmation result:', confirmed);
+    
+    if (!confirmed) return;
+    
+    // Show deleting message
+    setMessage({ type: 'success', text: `Deleting ${characterName}...` });
     
     try {
-      const response = await fetch(`http://localhost:3001/api/characters/${characterId}`, {
-        method: 'DELETE'
+      const response = await fetch(`${API_BASE_URL}/api/characters/${characterId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      }
       
       const data = await response.json();
       
       if (data.success) {
         setCharacters(characters.filter(c => c.id !== characterId));
-        setMessage({ type: 'success', text: 'Character deleted successfully' });
+        setMessage({ type: 'success', text: `${characterName} deleted successfully` });
       } else {
-        throw new Error(data.error);
+        throw new Error(data.error || 'Failed to delete character');
       }
     } catch (error) {
       console.error('Failed to delete character:', error);
-      setMessage({ type: 'error', text: 'Failed to delete character' });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setMessage({ type: 'error', text: `Delete failed: ${errorMessage}` });
     }
   };
 
   const exportCharacter = async (characterId: string) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/characters/${characterId}/export?userId=default-user`);
+      const response = await fetch(`${API_BASE_URL}/api/characters/${characterId}/export?userId=default-user`);
       const data = await response.json();
       
       // Create a blob from the JSON data
@@ -114,17 +142,41 @@ const CharactersPage: React.FC = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    try {
-      const fileContent = await file.text();
-      const importData = JSON.parse(fileContent);
+    // Show loading state
+    setMessage({ type: 'success', text: 'Reading file...' });
 
-      const response = await fetch('http://localhost:3001/api/characters/import?userId=default-user', {
+    try {
+      // Validate file type
+      if (!file.name.endsWith('.json') && file.type !== 'application/json') {
+        throw new Error('Please select a valid JSON file');
+      }
+
+      // Read file content
+      const fileContent = await file.text();
+      
+      // Parse JSON
+      let importData;
+      try {
+        importData = JSON.parse(fileContent);
+      } catch (parseError) {
+        throw new Error('Invalid JSON file format');
+      }
+
+      setMessage({ type: 'success', text: 'Uploading to server...' });
+
+      // Send to server
+      const response = await fetch(`${API_BASE_URL}/api/characters/import?userId=default-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(importData)
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      }
 
       const data = await response.json();
 
@@ -142,9 +194,10 @@ const CharactersPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to import character:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to import character';
       setMessage({ 
         type: 'error', 
-        text: error instanceof Error ? error.message : 'Failed to import character' 
+        text: `Import failed: ${errorMessage}` 
       });
     } finally {
       // Reset file input
@@ -166,47 +219,48 @@ const CharactersPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="min-h-screen bg-gray-100 p-3 md:p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex items-center justify-between">
+        <div className="bg-white rounded-lg shadow-sm p-4 md:p-6 mb-4 md:mb-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-800 flex items-center">
-                <span className="text-2xl mr-3">👥</span>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center">
+                <span className="text-xl md:text-2xl mr-2 md:mr-3">👥</span>
                 Characters
               </h1>
-              <p className="text-gray-600 mt-2">Create and manage your AI characters</p>
+              <p className="text-sm md:text-base text-gray-600 mt-1 md:mt-2">Create and manage your AI characters</p>
             </div>
-            <div className="flex space-x-3">
+            <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
               <button
                 onClick={handleImportClick}
-                className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center"
+                className="bg-green-500 hover:bg-green-600 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center min-h-[44px] text-sm md:text-base"
               >
                 <span className="mr-2">📥</span>
                 Import
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl min-h-[44px] text-sm md:text-base"
               >
                 + Create Character
               </button>
             </div>
           </div>
-          {/* Hidden file input for import */}
+          {/* Hidden file input for import - more permissive for mobile */}
           <input
             ref={fileInputRef}
             type="file"
-            accept="application/json,.json"
+            accept=".json,application/json,text/*"
             onChange={handleFileImport}
             className="hidden"
+            style={{ display: 'none' }}
           />
         </div>
 
         {/* Message */}
         {message && (
-          <div className={`p-4 rounded-lg mb-6 ${
+          <div className={`p-3 md:p-4 rounded-lg mb-4 md:mb-6 text-sm md:text-base ${
             message.type === 'success' 
               ? 'bg-green-50 text-green-800 border border-green-200' 
               : 'bg-red-50 text-red-800 border border-red-200'
@@ -217,60 +271,60 @@ const CharactersPage: React.FC = () => {
 
         {/* Characters Grid */}
         {characters.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <div className="text-6xl mb-4">🎭</div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">No characters yet</h3>
-            <p className="text-gray-600 mb-6">Create your first AI character to get started</p>
+          <div className="bg-white rounded-lg shadow-sm p-8 md:p-12 text-center">
+            <div className="text-5xl md:text-6xl mb-3 md:mb-4">🎭</div>
+            <h3 className="text-lg md:text-xl font-semibold text-gray-800 mb-2">No characters yet</h3>
+            <p className="text-sm md:text-base text-gray-600 mb-4 md:mb-6">Create your first AI character to get started</p>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200"
+              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 min-h-[44px] text-sm md:text-base"
             >
               Create Your First Character
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
             {characters.map((character) => {
               return (
-                <div key={character.id} className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200">
+                <div key={character.id} className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200 active:scale-[0.98]">
                   {/* Character Avatar */}
-                  <div className="h-32 bg-gradient-to-br from-blue-500 to-purple-600 relative">
+                  <div className="h-24 md:h-32 bg-gradient-to-br from-blue-500 to-purple-600 relative">
                     <div className="absolute inset-0 flex items-center justify-center">
                       {character.display && character.display !== 'default.png' ? (
                         <img 
                           src={character.display} 
                           alt={character.name}
-                          className="w-16 h-16 rounded-full object-cover border-4 border-white shadow-lg"
+                          className="w-12 h-12 md:w-16 md:h-16 rounded-full object-cover border-2 md:border-4 border-white shadow-lg"
                         />
                       ) : (
-                        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-2xl font-bold text-gray-600">
+                        <div className="w-12 h-12 md:w-16 md:h-16 bg-white rounded-full flex items-center justify-center text-xl md:text-2xl font-bold text-gray-600">
                           {character.name.charAt(0).toUpperCase()}
                         </div>
                       )}
                     </div>
                     {/* Usage indicator */}
-                    <div className="absolute top-3 right-3 bg-white bg-opacity-90 rounded-full px-2 py-1 text-xs font-medium text-gray-700">
+                    <div className="absolute top-2 md:top-3 right-2 md:right-3 bg-white bg-opacity-90 rounded-full px-2 py-1 text-xs font-medium text-gray-700">
                       {character.usage_count} chats
                     </div>
                   </div>
 
-                  <div className="p-4">
+                  <div className="p-3 md:p-4">
                     {/* Character Info */}
-                    <div className="mb-3">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-1">{character.name}</h3>
-                      <p className="text-sm text-gray-600 line-clamp-2">{character.description}</p>
+                    <div className="mb-2 md:mb-3">
+                      <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-1">{character.name}</h3>
+                      <p className="text-xs md:text-sm text-gray-600 line-clamp-2">{character.description}</p>
                     </div>
 
                     {/* Background preview */}
                     {character.definition && (
-                      <div className="mb-3">
+                      <div className="mb-2 md:mb-3">
                         <p className="text-xs text-gray-500 mb-1">Background:</p>
-                        <p className="text-sm text-gray-700 line-clamp-2">{character.definition}</p>
+                        <p className="text-xs md:text-sm text-gray-700 line-clamp-2">{character.definition}</p>
                       </div>
                     )}
 
                     {/* Status */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-3 md:mb-4">
                       <div className="flex items-center space-x-2">
                         <div className={`w-2 h-2 rounded-full ${character.is_active ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                         <span className="text-xs text-gray-600">
@@ -287,20 +341,31 @@ const CharactersPage: React.FC = () => {
                       <div className="flex space-x-2">
                         <button
                           onClick={() => setEditingCharacter(character)}
-                          className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                          className="flex-1 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-600 px-3 py-2 rounded-lg text-xs md:text-sm font-medium transition-colors duration-200 min-h-[40px]"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => exportCharacter(character.id)}
-                          className="flex-1 bg-green-50 hover:bg-green-100 text-green-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                          className="flex-1 bg-green-50 hover:bg-green-100 active:bg-green-200 text-green-600 px-3 py-2 rounded-lg text-xs md:text-sm font-medium transition-colors duration-200 min-h-[40px]"
                         >
                           📥 Export
                         </button>
                       </div>
                       <button
-                        onClick={() => deleteCharacter(character.id)}
-                        className="w-full bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('Delete button event triggered');
+                          deleteCharacter(character.id);
+                        }}
+                        className="w-full bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-600 px-3 py-2 rounded-lg text-xs md:text-sm font-medium transition-colors duration-200 min-h-[40px] touch-manipulation cursor-pointer select-none"
+                        style={{ 
+                          WebkitTapHighlightColor: 'rgba(239, 68, 68, 0.2)',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none'
+                        }}
+                        type="button"
                       >
                         Delete
                       </button>
@@ -403,7 +468,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
   const loadAvailableModels = async () => {
     setLoadingModels(true);
     try {
-      const response = await fetch('http://localhost:3001/api/llm/models');
+      const response = await fetch(`${API_BASE_URL}/api/llm/models`);
       const data = await response.json();
       
       if (data.success) {
@@ -426,8 +491,8 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
     
     try {
       const url = character 
-        ? `http://localhost:3001/api/characters/${character.id}`
-        : 'http://localhost:3001/api/characters';
+        ? `${API_BASE_URL}/api/characters/${character.id}`
+        : `${API_BASE_URL}/api/characters`;
       
       const method = character ? 'PUT' : 'POST';
       
@@ -471,18 +536,18 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-800">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-3 md:p-4 z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[95vh] md:max-h-[90vh] overflow-y-auto">
+        <div className="p-4 md:p-6 border-b sticky top-0 bg-white z-10">
+          <h2 className="text-lg md:text-xl font-semibold text-gray-800">
             {character ? 'Edit Character' : 'Create New Character'}
           </h2>
         </div>
         
-        <div className="p-6 space-y-4">
+        <div className="p-4 md:p-6 space-y-3 md:space-y-4">
           {/* Avatar Preview */}
-          <div className="text-center mb-6">
-            <div className="w-24 h-24 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-4">
+          <div className="text-center mb-4 md:mb-6">
+            <div className="w-20 h-20 md:w-24 md:h-24 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-3 md:mb-4">
               {formData.avatar && formData.avatar.trim() ? (
                 <img 
                   src={formData.avatar} 
@@ -490,7 +555,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
                   className="w-full h-full rounded-full object-cover"
                 />
               ) : (
-                <span className="text-3xl font-bold text-white">
+                <span className="text-2xl md:text-3xl font-bold text-white">
                   {formData.name.charAt(0).toUpperCase() || '?'}
                 </span>
               )}
@@ -506,7 +571,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
               placeholder="Enter character name"
             />
           </div>
@@ -520,7 +585,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
               placeholder="Brief description of the character"
             />
           </div>
@@ -534,7 +599,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
               value={formData.background}
               onChange={(e) => setFormData({ ...formData, background: e.target.value })}
               rows={6}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
               placeholder="Detailed background information, personality traits, speaking style, etc."
             />
           </div>
@@ -548,7 +613,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
               type="url"
               value={formData.avatar}
               onChange={(e) => setFormData({ ...formData, avatar: e.target.value })}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
               placeholder="https://example.com/avatar.jpg"
             />
           </div>
@@ -585,7 +650,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
                     <select
                       value={customModel}
                       onChange={(e) => setCustomModel(e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
                     >
                       <option value="">Select a model...</option>
                       {availableModels.map((model) => (
@@ -629,7 +694,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
                     onChange={(e) => setCustomMaxTokens(parseInt(e.target.value) || 0)}
                     min="100"
                     max="8000"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Maximum response length (100-8000)
@@ -640,10 +705,10 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
           </div>
         </div>
 
-        <div className="p-6 border-t flex justify-end space-x-3">
+        <div className="p-4 md:p-6 border-t flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 sticky bottom-0 bg-white">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+            className="px-4 py-2.5 text-gray-600 hover:text-gray-800 font-medium min-h-[44px] text-sm md:text-base order-2 sm:order-1"
             disabled={saving}
           >
             Cancel
@@ -651,7 +716,7 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, onClose, onS
           <button
             onClick={handleSave}
             disabled={saving || !formData.name.trim()}
-            className={`px-6 py-2 rounded-lg font-medium transition-all duration-200 ${
+            className={`px-6 py-2.5 rounded-lg font-medium transition-all duration-200 min-h-[44px] text-sm md:text-base order-1 sm:order-2 ${
               saving || !formData.name.trim()
                 ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                 : 'bg-blue-500 hover:bg-blue-600 text-white'

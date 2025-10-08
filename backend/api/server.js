@@ -21,19 +21,45 @@ class APIServer {
     }
 
     setupMiddleware() {
-        // Enable CORS for frontend
+        // Enable CORS for frontend - allow both localhost and network access
         this.app.use(cors({
-            origin: 'http://localhost:5173',
+            origin: function(origin, callback) {
+                // Allow requests with no origin (like mobile apps or Postman)
+                if (!origin) return callback(null, true);
+                
+                // Allow localhost and any IP on port 5173 (Vite dev server)
+                if (origin.includes('localhost:5173') || origin.includes(':5173')) {
+                    return callback(null, true);
+                }
+                
+                // Log rejected origins for debugging
+                console.log(`⚠️  CORS rejected origin: ${origin}`);
+                // Deny but don't throw error - just return false
+                callback(null, false);
+            },
             credentials: true
         }));
 
-        // Parse JSON bodies
-        this.app.use(express.json());
+        // Parse JSON bodies with larger limit for character imports
+        this.app.use(express.json({ limit: '10mb' }));
 
-        // Basic logging
+        // Basic logging with more details
         this.app.use((req, res, next) => {
             console.log(`[API] ${req.method} ${req.path}`);
+            if (req.headers.origin) {
+                console.log(`  Origin: ${req.headers.origin}`);
+            }
             next();
+        });
+
+        // Error handling middleware
+        this.app.use((err, req, res, next) => {
+            console.error('❌ Server Error:', err);
+            res.status(500).json({ 
+                success: false,
+                error: err.message || 'Internal server error',
+                details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+            });
         });
     }
 
@@ -84,7 +110,8 @@ class APIServer {
     async start() {
         return new Promise((resolve, reject) => {
             try {
-                this.server = this.app.listen(this.port, () => {
+                // Listen on all network interfaces (0.0.0.0) to allow mobile device access
+                this.server = this.app.listen(this.port, '0.0.0.0', () => {
                     console.log(`🌐 API Server started on http://localhost:${this.port}`);
                     console.log(`📡 Chat API available at http://localhost:${this.port}/api/chat`);
                     

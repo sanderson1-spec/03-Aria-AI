@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { Message } from '../types';
+import { API_BASE_URL } from '../config/api';
 
 interface Character {
   id: string;
@@ -124,7 +125,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     
     try {
       // Call backend API to delete chat from database
-      const response = await fetch(`http://localhost:3001/api/chat/${chatId}?userId=user-1`, {
+      const response = await fetch(`${API_BASE_URL}/api/chat/${chatId}?userId=user-1`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -170,7 +171,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   const loadCharacters = async () => {
     setIsLoadingCharacters(true);
     try {
-      const response = await fetch('http://localhost:3001/api/characters');
+      const response = await fetch(`${API_BASE_URL}/api/characters`);
       const data = await response.json();
       if (data.success) {
         setCharacters(data.data);

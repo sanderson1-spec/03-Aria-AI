@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../../config/api';
 
 interface Model {
   id: string;
@@ -36,7 +37,7 @@ const SettingsPage: React.FC = () => {
 
   const loadSettings = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/llm/config');
+      const response = await fetch(`${API_BASE_URL}/api/llm/config`);
       const data = await response.json();
       
       if (data.success) {
@@ -66,7 +67,7 @@ const SettingsPage: React.FC = () => {
 
   const loadModels = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/llm/models');
+      const response = await fetch(`${API_BASE_URL}/api/llm/models`);
       const data = await response.json();
       
       if (data.success) {
@@ -89,7 +90,7 @@ const SettingsPage: React.FC = () => {
     setMessage(null);
     
     try {
-      const response = await fetch('http://localhost:3001/api/llm/config/user', {
+      const response = await fetch(`${API_BASE_URL}/api/llm/config/user`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -160,20 +161,20 @@ const SettingsPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="min-h-screen bg-gray-100 p-3 md:p-6">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 flex items-center">
-            <span className="text-2xl mr-3">⚙️</span>
+        <div className="bg-white rounded-lg shadow-sm p-4 md:p-6 mb-4 md:mb-6">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center">
+            <span className="text-xl md:text-2xl mr-2 md:mr-3">⚙️</span>
             Settings
           </h1>
-          <p className="text-gray-600 mt-2">Configure your Aria AI experience</p>
+          <p className="text-sm md:text-base text-gray-600 mt-1 md:mt-2">Configure your Aria AI experience</p>
         </div>
 
         {/* Message */}
         {message && (
-          <div className={`p-4 rounded-lg mb-6 ${
+          <div className={`p-3 md:p-4 rounded-lg mb-4 md:mb-6 text-sm md:text-base ${
             message.type === 'success' 
               ? 'bg-green-50 text-green-800 border border-green-200' 
               : 'bg-red-50 text-red-800 border border-red-200'
@@ -183,15 +184,15 @@ const SettingsPage: React.FC = () => {
         )}
 
         {settings && (
-          <div className="space-y-6">
+          <div className="space-y-4 md:space-y-6">
             {/* LLM Settings */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-                <span className="text-lg mr-3">🤖</span>
+            <div className="bg-white rounded-lg shadow-sm p-4 md:p-6">
+              <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
+                <span className="text-base md:text-lg mr-2 md:mr-3">🤖</span>
                 AI Model Settings
               </h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {/* Model Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -200,7 +201,7 @@ const SettingsPage: React.FC = () => {
                   <select
                     value={settings.llm.model}
                     onChange={(e) => updateLLMSetting('model', e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
                   >
                     {models.map((model) => (
                       <option key={model.id} value={model.id}>
@@ -225,7 +226,7 @@ const SettingsPage: React.FC = () => {
                     step="0.1"
                     value={settings.llm.temperature}
                     onChange={(e) => updateLLMSetting('temperature', parseFloat(e.target.value))}
-                    className="w-full"
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
                   />
                   <div className="flex justify-between text-xs text-gray-500 mt-1">
                     <span>Conservative (0)</span>
@@ -245,7 +246,7 @@ const SettingsPage: React.FC = () => {
                     step="100"
                     value={settings.llm.maxTokens}
                     onChange={(e) => updateLLMSetting('maxTokens', parseInt(e.target.value))}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Maximum response length (100-8192)
@@ -255,13 +256,13 @@ const SettingsPage: React.FC = () => {
             </div>
 
             {/* UI Settings */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-                <span className="text-lg mr-3">🎨</span>
+            <div className="bg-white rounded-lg shadow-sm p-4 md:p-6">
+              <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
+                <span className="text-base md:text-lg mr-2 md:mr-3">🎨</span>
                 Interface Settings
               </h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {/* Theme */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -270,7 +271,7 @@ const SettingsPage: React.FC = () => {
                   <select
                     value={settings.ui.theme}
                     onChange={(e) => updateUISetting('theme', e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
                   >
                     <option value="light">Light</option>
                     <option value="dark">Dark</option>
@@ -286,7 +287,7 @@ const SettingsPage: React.FC = () => {
                   <select
                     value={settings.ui.language}
                     onChange={(e) => updateUISetting('language', e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
                   >
                     <option value="en">English</option>
                     <option value="es">Español</option>
@@ -298,34 +299,34 @@ const SettingsPage: React.FC = () => {
             </div>
 
             {/* Connection Status */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-                <span className="text-lg mr-3">🔗</span>
+            <div className="bg-white rounded-lg shadow-sm p-4 md:p-6">
+              <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
+                <span className="text-base md:text-lg mr-2 md:mr-3">🔗</span>
                 Connection Status
               </h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="flex items-center space-x-3 p-4 bg-green-50 rounded-lg border border-green-200">
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                <div className="flex items-center space-x-3 p-3 md:p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></div>
                   <div>
-                    <p className="font-medium text-green-800">API Server</p>
-                    <p className="text-sm text-green-600">Connected</p>
+                    <p className="font-medium text-green-800 text-sm md:text-base">API Server</p>
+                    <p className="text-xs md:text-sm text-green-600">Connected</p>
                   </div>
                 </div>
                 
-                <div className="flex items-center space-x-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                <div className="flex items-center space-x-3 p-3 md:p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full flex-shrink-0"></div>
                   <div>
-                    <p className="font-medium text-blue-800">LM Studio</p>
-                    <p className="text-sm text-blue-600">Available</p>
+                    <p className="font-medium text-blue-800 text-sm md:text-base">LM Studio</p>
+                    <p className="text-xs md:text-sm text-blue-600">Available</p>
                   </div>
                 </div>
                 
-                <div className="flex items-center space-x-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
-                  <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                <div className="flex items-center space-x-3 p-3 md:p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className="w-3 h-3 bg-purple-500 rounded-full flex-shrink-0"></div>
                   <div>
-                    <p className="font-medium text-purple-800">Database</p>
-                    <p className="text-sm text-purple-600">Ready</p>
+                    <p className="font-medium text-purple-800 text-sm md:text-base">Database</p>
+                    <p className="text-xs md:text-sm text-purple-600">Ready</p>
                   </div>
                 </div>
               </div>
@@ -336,14 +337,14 @@ const SettingsPage: React.FC = () => {
               <button
                 onClick={saveSettings}
                 disabled={saving}
-                className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 min-h-[44px] w-full md:w-auto text-sm md:text-base ${
                   saving
                     ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                     : 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg hover:shadow-xl'
                 }`}
               >
                 {saving ? (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center justify-center space-x-2">
                     <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
                     <span>Saving...</span>
                   </div>

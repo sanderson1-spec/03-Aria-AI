@@ -7,6 +7,7 @@ import { useProactiveMessages } from '../../hooks/useProactiveMessages';
 import type { Message } from '../../types';
 import { formatChatTimestamp } from '../../utils/dateFormatter';
 import ReactMarkdown from 'react-markdown';
+import { API_BASE_URL } from '../../config/api';
 
 const ChatPage: React.FC = () => {
   const {
@@ -153,7 +154,7 @@ const ChatPage: React.FC = () => {
     
     try {
       // Use fetch with streaming handling
-      const response = await fetch('http://localhost:3001/api/chat/stream', {
+      const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -270,70 +271,70 @@ const ChatPage: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col h-screen md:h-auto">
       {/* Header */}
-      <div className="bg-white border-b p-4 flex items-center justify-between">
+      <div className="bg-white border-b p-3 md:p-4 flex items-center justify-between flex-shrink-0">
         {currentChat ? (
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 md:space-x-3">
             <img 
               src={`/avatars/${currentChat.characterAvatar}`}
               alt={currentChat.characterName}
-              className="w-10 h-10 rounded-full object-cover"
+              className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover"
               onError={(e) => {
                 (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentChat.characterName)}&background=random`;
               }}
             />
             <div>
-              <h2 className="font-semibold text-gray-800">{currentChat.characterName}</h2>
-              <p className="text-sm text-gray-500">AI Character</p>
+              <h2 className="font-semibold text-gray-800 text-sm md:text-base">{currentChat.characterName}</h2>
+              <p className="text-xs md:text-sm text-gray-500">AI Character</p>
             </div>
           </div>
         ) : (
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-gray-600">
+          <div className="flex items-center space-x-2 md:space-x-3">
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-gray-300 rounded-full flex items-center justify-center text-gray-600 text-sm md:text-base">
               💬
             </div>
             <div>
-              <h2 className="font-semibold text-gray-800">No Chat Selected</h2>
-              <p className="text-sm text-gray-500">Create a new chat to get started</p>
+              <h2 className="font-semibold text-gray-800 text-sm md:text-base">No Chat Selected</h2>
+              <p className="text-xs md:text-sm text-gray-500 hidden md:block">Create a new chat to get started</p>
             </div>
           </div>
         )}
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2 text-green-600">
+        <div className="flex items-center space-x-2 md:space-x-4">
+          <div className="hidden md:flex items-center space-x-2 text-green-600">
             <div className="w-2 h-2 bg-green-500 rounded-full"></div>
             <span className="text-sm font-medium">Connected</span>
           </div>
           {currentChat && (
-            <div className={`flex items-center space-x-2 ${
+            <div className={`flex items-center space-x-1 md:space-x-2 ${
               isProactiveConnected ? 'text-blue-600' : 'text-gray-400'
             }`}>
               <div className={`w-2 h-2 rounded-full ${
                 isProactiveConnected ? 'bg-blue-500' : 'bg-gray-300'
               }`}></div>
-              <span className="text-sm font-medium">
-                {isProactiveConnected ? 'Proactive' : 'Proactive Off'}
+              <span className="text-xs md:text-sm font-medium">
+                {isProactiveConnected ? 'Proactive' : 'Off'}
               </span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Psychology Section - Collapsible */}
+      {/* Psychology Section - Collapsible (Desktop only) */}
       {currentChat && (
         <CollapsiblePsychologySection
           characterName={currentChat.characterName}
           sessionId={currentChat.id}
-          className="m-4"
+          className="m-4 hidden md:block"
         />
       )}
 
       {/* Tasks and Events Panel */}
       {currentChat && (
-        <div className="m-4">
-          <div className="flex gap-4">
+        <div className="mx-2 my-2 md:m-4">
+          <div className="flex flex-col md:flex-row gap-2 md:gap-4">
             <div className="flex-1">
-              <h3 className="font-semibold mb-2">Tasks</h3>
+              <h3 className="font-semibold mb-2 text-sm md:text-base">Tasks</h3>
               <CommitmentPanel 
                 chatId={currentChat.id} 
                 userId="user-1"
@@ -341,7 +342,7 @@ const ChatPage: React.FC = () => {
               />
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold mb-2">Events</h3>
+              <h3 className="font-semibold mb-2 text-sm md:text-base">Events</h3>
               <EventsPanel 
                 chatId={currentChat.id} 
                 userId="user-1"
@@ -352,7 +353,11 @@ const ChatPage: React.FC = () => {
       )}
 
       {/* Messages - Scrollable Area with Fixed Height */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 md:space-y-6"
+           style={{ 
+             maxHeight: 'calc(100vh - 400px)',
+             minHeight: '200px'
+           }}>
         {currentChat ? (
           <>
             {currentChat.messages.map((message) => {
@@ -466,11 +471,11 @@ const ChatPage: React.FC = () => {
 
               // Render regular message
               return (
-                <div key={message.id} className={`flex items-start space-x-3 ${
+                <div key={message.id} className={`flex items-start space-x-2 md:space-x-3 ${
                   message.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''
                 }`}>
                   {/* Avatar */}
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center flex-shrink-0 text-sm md:text-base ${
                     message.type === 'user' 
                       ? 'bg-blue-500 text-white' 
                       : 'bg-gradient-to-br from-purple-500 to-pink-500 text-white'
@@ -479,15 +484,15 @@ const ChatPage: React.FC = () => {
                   </div>
                   
                   {/* Message Bubble */}
-                  <div className={`max-w-xs lg:max-w-md xl:max-w-lg ${
+                  <div className={`max-w-[75%] md:max-w-xs lg:max-w-md xl:max-w-lg ${
                     message.type === 'user' ? 'items-end' : 'items-start'
                   }`}>
-                    <div className={`px-4 py-3 rounded-2xl shadow-sm ${
+                    <div className={`px-3 py-2 md:px-4 md:py-3 rounded-2xl shadow-sm ${
                       message.type === 'user' 
                         ? 'bg-blue-500 text-white rounded-br-md'
                         : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md'
                     }`}>
-                      <div className="text-sm leading-relaxed">
+                      <div className="text-xs md:text-sm leading-relaxed">
                         <ReactMarkdown
                           components={{
                             p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
@@ -554,9 +559,9 @@ const ChatPage: React.FC = () => {
       </div>
 
       {/* Input Area - Fixed at bottom */}
-      <div className="bg-white border-t p-4 flex-shrink-0">
+      <div className="bg-white border-t p-2 md:p-4 flex-shrink-0">
         <div className="relative">
-          <div className="flex items-end space-x-3">
+          <div className="flex items-end space-x-2 md:space-x-3">
             {/* Growing Textarea */}
             <div className="flex-1 relative">
               <textarea
@@ -564,10 +569,10 @@ const ChatPage: React.FC = () => {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={currentChat ? `Message ${currentChat.characterName}... (Press Enter to send, Shift+Enter for new line)` : "Select a character to start chatting..."}
+                placeholder={currentChat ? `Message ${currentChat.characterName}...` : "Select a character to start chatting..."}
                 disabled={!currentChat}
-                className={`w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 min-h-[48px] max-h-[120px] overflow-y-auto ${!currentChat ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`}
-                style={{ height: '48px' }}
+                className={`w-full px-3 py-2 md:px-4 md:py-3 pr-12 border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 min-h-[44px] max-h-[120px] overflow-y-auto text-sm md:text-base ${!currentChat ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`}
+                style={{ height: '44px' }}
               />
               
               {/* Character count (optional) */}
@@ -582,7 +587,7 @@ const ChatPage: React.FC = () => {
             <button
               onClick={handleSendMessage}
               disabled={!inputValue.trim() || isTyping || !currentChat}
-              className={`p-3 rounded-full transition-all duration-200 flex items-center justify-center ${
+              className={`p-2.5 md:p-3 rounded-full transition-all duration-200 flex items-center justify-center min-w-[44px] min-h-[44px] ${
                 inputValue.trim() && !isTyping && currentChat
                   ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
                   : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -598,8 +603,8 @@ const ChatPage: React.FC = () => {
             </button>
           </div>
           
-          {/* Helper text */}
-          <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
+          {/* Helper text - Desktop only */}
+          <div className="mt-2 text-xs text-gray-500 hidden md:flex items-center justify-between">
             <span>💡 Tip: Use Shift+Enter for line breaks</span>
             <div className="flex items-center space-x-2">
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -611,13 +616,13 @@ const ChatPage: React.FC = () => {
 
       {/* Character Selection Modal */}
       {showNewChatModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-4xl max-h-[80vh] overflow-hidden">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Choose a Character</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-4 md:p-6 w-full max-w-4xl max-h-[90vh] md:max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between mb-4 md:mb-6">
+              <h2 className="text-xl md:text-2xl font-bold text-gray-800">Choose a Character</h2>
               <button
                 onClick={() => setShowNewChatModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -626,59 +631,59 @@ const ChatPage: React.FC = () => {
             </div>
 
             {isLoadingCharacters ? (
-              <div className="flex items-center justify-center py-12">
+              <div className="flex items-center justify-center py-8 md:py-12">
                 <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <span className="ml-3 text-gray-600">Loading characters...</span>
+                <span className="ml-3 text-sm md:text-base text-gray-600">Loading characters...</span>
               </div>
             ) : characters.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="text-center py-8 md:py-12">
+                <div className="w-12 h-12 md:w-16 md:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 md:w-8 md:h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">No Characters Available</h3>
-                <p className="text-gray-500 mb-4">Create some characters first to start chatting</p>
+                <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">No Characters Available</h3>
+                <p className="text-sm md:text-base text-gray-500 mb-4">Create some characters first to start chatting</p>
                 <button
                   onClick={() => setShowNewChatModal(false)}
-                  className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm md:text-base min-h-[44px]"
                 >
                   Go to Characters Page
                 </button>
               </div>
             ) : (
-              <div className="overflow-y-auto max-h-[60vh]">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="overflow-y-auto max-h-[65vh] md:max-h-[60vh]">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                   {characters.map((character) => (
                     <div
                       key={character.id}
                       onClick={() => createNewChat(character)}
-                      className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer group"
+                      className="bg-white border border-gray-200 rounded-xl p-3 md:p-4 hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer group active:scale-95"
                     >
-                      <div className="flex items-center space-x-3 mb-3">
+                      <div className="flex items-center space-x-3 mb-2 md:mb-3">
                         <img
                           src={`/avatars/${character.display}`}
                           alt={character.name}
-                          className="w-12 h-12 rounded-full object-cover"
+                          className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover"
                           onError={(e) => {
                             (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(character.name)}&background=random`;
                           }}
                         />
                         <div className="flex-1">
-                          <h3 className="font-semibold text-gray-800 group-hover:text-blue-600 transition-colors">
+                          <h3 className="font-semibold text-sm md:text-base text-gray-800 group-hover:text-blue-600 transition-colors">
                             {character.name}
                           </h3>
                         </div>
                       </div>
-                      <p className="text-sm text-gray-600 line-clamp-3 mb-3">
+                      <p className="text-xs md:text-sm text-gray-600 line-clamp-2 md:line-clamp-3 mb-2 md:mb-3">
                         {character.description}
                       </p>
                       {character.definition && (
-                        <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-2">
+                        <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-2 mb-2">
                           <p className="line-clamp-2">{character.definition}</p>
                         </div>
                       )}
-                      <div className="mt-3 flex items-center justify-end">
+                      <div className="mt-2 md:mt-3 flex items-center justify-end">
                         <span className="text-xs text-blue-500 group-hover:text-blue-600 font-medium">
                           Start Chat →
                         </span>

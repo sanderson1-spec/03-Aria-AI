@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { formatRelativeTime, formatDateTime } from '../../utils/dateFormatter';
 import type { Event } from '../../types';
+import { API_BASE_URL } from '../../config/api';
 
 interface EventsPanelProps {
   chatId: string;
@@ -21,7 +22,7 @@ const EventsPanel: React.FC<EventsPanelProps> = ({ chatId, userId }) => {
     setError(null);
     try {
       const response = await fetch(
-        `http://localhost:3001/api/events/upcoming?chatId=${chatId}&userId=${userId}`
+        `${API_BASE_URL}/api/events/upcoming?chatId=${chatId}&userId=${userId}`
       );
       const data = await response.json();
       

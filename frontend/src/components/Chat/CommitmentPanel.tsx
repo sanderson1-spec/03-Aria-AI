@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { formatDateTime } from '../../utils/dateFormatter';
+import { API_BASE_URL } from '../../config/api';
 
 interface Commitment {
   id: string;
@@ -74,7 +75,7 @@ const CommitmentPanel: React.FC<CommitmentPanelProps> = ({ chatId, userId, onVer
     setLoading(true);
     try {
       const response = await fetch(
-        `http://localhost:3001/api/commitments/active?chatId=${chatId}&userId=${userId}`
+        `${API_BASE_URL}/api/commitments/active?chatId=${chatId}&userId=${userId}`
       );
       const data = await response.json();
       
@@ -103,7 +104,7 @@ const CommitmentPanel: React.FC<CommitmentPanelProps> = ({ chatId, userId, onVer
     
     try {
       const response = await fetch(
-        `http://localhost:3001/api/commitments/${selectedCommitment.id}/submit`,
+        `${API_BASE_URL}/api/commitments/${selectedCommitment.id}/submit`,
         {
           method: 'POST',
           headers: {
@@ -172,7 +173,7 @@ const CommitmentPanel: React.FC<CommitmentPanelProps> = ({ chatId, userId, onVer
     
     try {
       const response = await fetch(
-        `http://localhost:3001/api/commitments/${selectedCommitment.id}/resubmit`,
+        `${API_BASE_URL}/api/commitments/${selectedCommitment.id}/resubmit`,
         {
           method: 'POST',
           headers: {

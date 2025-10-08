@@ -10,17 +10,7 @@ class ChatRoutes {
     }
 
     setupRoutes() {
-        // Enable CORS for frontend
-        this.router.use((req, res, next) => {
-            res.header('Access-Control-Allow-Origin', 'http://localhost:5173');
-            res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-            res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-            if (req.method === 'OPTIONS') {
-                res.sendStatus(200);
-            } else {
-                next();
-            }
-        });
+        // CORS is handled by main server middleware
 
         // Send a chat message (non-streaming)
         this.router.post('/message', async (req, res) => {
@@ -138,13 +128,11 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     return res.status(400).json({ error: 'Message is required' });
                 }
 
-                // Set up Server-Sent Events headers
+                // Set up Server-Sent Events headers (CORS already handled by main middleware)
                 res.writeHead(200, {
                     'Content-Type': 'text/event-stream',
                     'Cache-Control': 'no-cache',
-                    'Connection': 'keep-alive',
-                    'Access-Control-Allow-Origin': 'http://localhost:5173',
-                    'Access-Control-Allow-Headers': 'Cache-Control'
+                    'Connection': 'keep-alive'
                 });
 
                 // Get services
@@ -335,13 +323,11 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
             try {
                 const { sessionId } = req.params;
                 
-                // Set up Server-Sent Events headers
+                // Set up Server-Sent Events headers (CORS already handled by main middleware)
                 res.writeHead(200, {
                     'Content-Type': 'text/event-stream',
                     'Cache-Control': 'no-cache',
-                    'Connection': 'keep-alive',
-                    'Access-Control-Allow-Origin': 'http://localhost:5173',
-                    'Access-Control-Allow-Headers': 'Cache-Control'
+                    'Connection': 'keep-alive'
                 });
 
                 // Send initial connection confirmation
