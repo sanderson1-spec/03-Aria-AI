@@ -138,7 +138,17 @@ class DatabaseService {
                 if (err) {
                     reject(this.errorHandler?.wrapInfrastructureError(err, 'Failed to connect to database') || err);
                 } else {
-                    resolve(db);
+                    // Enable foreign key constraints (critical for CASCADE deletes)
+                    db.run('PRAGMA foreign_keys = ON', (pragmaErr) => {
+                        if (pragmaErr) {
+                            reject(this.errorHandler?.wrapInfrastructureError(pragmaErr, 'Failed to enable foreign keys') || pragmaErr);
+                        } else {
+                            if (this.logger) {
+                                this.logger.info('Foreign keys enabled', 'DatabaseService');
+                            }
+                            resolve(db);
+                        }
+                    });
                 }
             });
         });

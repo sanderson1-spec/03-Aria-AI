@@ -49,3 +49,4 @@ INSERT INTO configuration (key, value, type, description, category, is_user_conf
 -- }
 
 
+

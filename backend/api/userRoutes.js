@@ -13,7 +13,7 @@ class UserRoutes {
         // Get user profile
         this.router.get('/profile', this.authMiddleware, async (req, res) => {
             try {
-                const userId = req.query.userId || 'default-user';
+                const userId = req.user.id;
 
                 const databaseService = this.serviceFactory.get('database');
                 const dal = databaseService.getDAL();
@@ -61,7 +61,7 @@ class UserRoutes {
         // Update user profile
         this.router.put('/profile', this.authMiddleware, async (req, res) => {
             try {
-                const userId = req.body.userId || 'default-user';
+                const userId = req.user.id;
                 const { profile } = req.body;
 
                 // Validation

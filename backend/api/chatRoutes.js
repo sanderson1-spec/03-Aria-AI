@@ -455,7 +455,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 let psychologyState = await psychologyService.getCharacterState(actualSessionId);
                 if (!psychologyState) {
                     // Initialize psychology state for new session (fast)
-                    psychologyState = await psychologyService.initializeCharacterState(userId, characterId);
+                    psychologyState = await psychologyService.initializeCharacterState(actualSessionId, characterId);
                 }
 
                 // Get user profile
