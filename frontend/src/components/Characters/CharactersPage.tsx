@@ -32,7 +32,7 @@ interface LLMModel {
 
 const CharactersPage: React.FC = () => {
   const { user } = useAuth();
-  const userId = user?.id || "default-user"; // Fallback to default-user if not authenticated
+  const userId = user?.id || "";
   
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);

@@ -139,10 +139,10 @@ CREATE TABLE IF NOT EXISTS character_psychological_frameworks (
     FOREIGN KEY (personality_id) REFERENCES personalities(id) ON DELETE CASCADE
 );
 
--- Dynamic character psychological state (session-based)
+-- Dynamic character psychological state (chat-based, session_id is actually chatId)
 CREATE TABLE IF NOT EXISTS character_psychological_state (
     id TEXT PRIMARY KEY DEFAULT (hex(randomblob(16))),
-    session_id TEXT NOT NULL UNIQUE,                   -- Functional primary key
+    session_id TEXT NOT NULL UNIQUE,                   -- Functional primary key (actually chatId)
     personality_id TEXT NOT NULL,
     user_id TEXT NOT NULL,               -- Reference to user for isolation
     
@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS character_psychological_state (
     change_reason TEXT DEFAULT 'initialization',
     state_version INTEGER DEFAULT 1,
     
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES chats(id) ON DELETE CASCADE,
     FOREIGN KEY (personality_id) REFERENCES personalities(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -172,7 +172,7 @@ CREATE TABLE IF NOT EXISTS character_psychological_state (
 -- Character memory importance weighting
 CREATE TABLE IF NOT EXISTS character_memory_weights (
     id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,  -- Actually chatId
     user_id TEXT NOT NULL,               -- Reference to user for isolation
     message_id TEXT NOT NULL,            -- Reference to conversation log
     
@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS character_memory_weights (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES chats(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (message_id) REFERENCES conversation_logs(id) ON DELETE CASCADE
 );
@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS character_memory_weights (
 -- Psychology evolution tracking (for learning and improvement)
 CREATE TABLE IF NOT EXISTS psychology_evolution_log (
     id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,  -- Actually chatId
     personality_id TEXT NOT NULL,
     user_id TEXT NOT NULL,               -- Reference to user for isolation
     
@@ -216,7 +216,7 @@ CREATE TABLE IF NOT EXISTS psychology_evolution_log (
     
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES chats(id) ON DELETE CASCADE,
     FOREIGN KEY (personality_id) REFERENCES personalities(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -288,7 +288,7 @@ CREATE TABLE IF NOT EXISTS proactive_engagements (
     user_id TEXT NOT NULL,               -- Reference to user for isolation
     chat_id TEXT,                        -- Reference to chat (optional)
     personality_id TEXT NOT NULL,        -- Reference to personality
-    session_id TEXT,                     -- Reference to session (optional)
+    session_id TEXT,                     -- Actually chatId (optional)
     
     -- Engagement details
     engagement_type TEXT NOT NULL,       -- Type of proactive engagement
@@ -310,7 +310,7 @@ CREATE TABLE IF NOT EXISTS proactive_engagements (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE SET NULL,
     FOREIGN KEY (personality_id) REFERENCES personalities(id) ON DELETE CASCADE,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
+    FOREIGN KEY (session_id) REFERENCES chats(id) ON DELETE SET NULL
 );
 
 -- Proactive learning patterns

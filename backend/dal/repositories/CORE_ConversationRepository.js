@@ -128,11 +128,22 @@ class ConversationRepository extends BaseRepository {
             'save message'
         );
 
+        // Get user_id from chat
+        const chat = await this.dal.queryOne('SELECT user_id FROM chats WHERE id = ?', [sessionId]);
+        
+        if (!chat) {
+            throw this.errorHandler.wrapRepositoryError(
+                new Error('Chat not found'),
+                'Cannot save message for non-existent chat',
+                { sessionId }
+            );
+        }
+        
         const messageData = this.sanitizeData({
             chat_id: sessionId,  // Use chat_id instead of session_id
             role: sender,        // Use role instead of sender  
             content: message,    // Use content instead of message
-            user_id: analysisData.user_id || 'default-user',  // Add required user_id
+            user_id: chat.user_id,  // Get from chat record
             metadata: JSON.stringify(analysisData || {}),  // Store analysis data as JSON metadata
             timestamp: this.getCurrentTimestamp()
         });
@@ -777,19 +788,50 @@ class ConversationRepository extends BaseRepository {
      * Replaces database.js deleteChat method
      */
     async deleteChat(chatId) {
-        // Delete conversation logs
+        // Delete conversation logs (using correct column name: chat_id)
         const messagesResult = await this.dal.execute(
-            `DELETE FROM conversation_logs WHERE session_id = ?`, 
+            `DELETE FROM conversation_logs WHERE chat_id = ?`, 
             [chatId]
         );
         
-        // Delete memory weights
+        // Delete memory weights (using correct column name: session_id is still correct here)
         await this.dal.execute(
             `DELETE FROM character_memory_weights WHERE session_id = ?`, 
             [chatId]
         );
+        
+        // Delete commitments associated with this chat
+        await this.dal.execute(
+            `DELETE FROM commitments WHERE chat_id = ?`, 
+            [chatId]
+        );
+        
+        // Delete events associated with this chat (if table exists - it's in migrations)
+        try {
+            await this.dal.execute(
+                `DELETE FROM events WHERE chat_id = ?`, 
+                [chatId]
+            );
+        } catch (error) {
+            // Events table may not exist if migrations haven't been run
+            if (!error.message.includes('no such table')) {
+                throw error;
+            }
+        }
+        
+        // Delete psychology state for this chat session
+        await this.dal.execute(
+            `DELETE FROM character_psychological_state WHERE session_id = ?`, 
+            [chatId]
+        );
+        
+        // Delete proactive engagements for this chat
+        await this.dal.execute(
+            `DELETE FROM proactive_engagements WHERE chat_id = ?`, 
+            [chatId]
+        );
 
-        // Delete the chat
+        // Delete the chat itself
         const chatResult = await this.dal.execute(
             `DELETE FROM chats WHERE id = ?`, 
             [chatId]

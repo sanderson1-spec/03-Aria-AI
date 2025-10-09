@@ -300,9 +300,18 @@ class PsychologyRepository extends BaseRepository {
             'update psychological state'
         );
 
-        // Get user_id from session
-        const session = await this.dal.queryOne('SELECT user_id FROM sessions WHERE id = ?', [sessionId]);
-        const userId = session ? session.user_id : 'default-user';
+        // Get user_id from chat (sessionId is actually chatId in most cases)
+        const chat = await this.dal.queryOne('SELECT user_id FROM chats WHERE id = ?', [sessionId]);
+        
+        if (!chat) {
+            throw this.errorHandler.wrapRepositoryError(
+                new Error('Chat not found'),
+                'Cannot update psychological state for non-existent chat',
+                { sessionId, personalityId }
+            );
+        }
+        
+        const userId = chat.user_id;
 
         const stateRecord = {
             session_id: sessionId,

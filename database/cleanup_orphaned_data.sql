@@ -42,3 +42,4 @@ SELECT COUNT(*) as conversation_logs_count FROM conversation_logs;
 SELECT COUNT(*) as chats_count FROM chats;
 
 
+

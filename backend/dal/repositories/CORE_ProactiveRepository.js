@@ -30,6 +30,17 @@ class ProactiveRepository extends BaseRepository {
             engagementTiming
         } = engagementData;
 
+        // Get user_id from chat (sessionId is actually chatId)
+        const chat = await this.dal.queryOne('SELECT user_id FROM chats WHERE id = ?', [sessionId]);
+        
+        if (!chat) {
+            throw this.errorHandler.wrapRepositoryError(
+                new Error('Chat not found'),
+                'Cannot record engagement attempt for non-existent chat',
+                { sessionId }
+            );
+        }
+
         // Generate UUID for engagement
         const engagementId = `proactive-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         
@@ -38,7 +49,7 @@ class ProactiveRepository extends BaseRepository {
                 id, user_id, session_id, personality_id, engagement_type, 
                 trigger_context, engagement_content, engagement_metadata,
                 optimal_timing, status
-            ) VALUES (?, 'default-user', ?, ?, ?, ?, ?, ?, ?, 'pending')
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
         `;
 
         const metadata = {
@@ -49,6 +60,7 @@ class ProactiveRepository extends BaseRepository {
 
         const params = [
             engagementId,
+            chat.user_id,
             sessionId,
             personalityId,
             triggerType || 'intelligence_driven',
@@ -180,6 +192,17 @@ class ProactiveRepository extends BaseRepository {
             successRate
         } = optimizationData;
 
+        // Get personality creator as user_id (timing optimizations are per-personality, not per-user)
+        const personality = await this.dal.queryOne('SELECT user_id FROM personalities WHERE id = ?', [personalityId]);
+        
+        if (!personality) {
+            throw this.errorHandler.wrapRepositoryError(
+                new Error('Personality not found'),
+                'Cannot update timing optimization for non-existent personality',
+                { personalityId }
+            );
+        }
+
         // Generate UUID for optimization record
         const optimizationId = `timing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -187,11 +210,12 @@ class ProactiveRepository extends BaseRepository {
             INSERT OR REPLACE INTO proactive_timing_optimizations (
                 id, user_id, personality_id, context_type, optimal_delay_seconds,
                 confidence_level, sample_size, success_rate
-            ) VALUES (?, 'default-user', ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const params = [
             optimizationId,
+            personality.user_id,
             personalityId,
             contextType,
             optimalDelaySeconds,
@@ -229,6 +253,17 @@ class ProactiveRepository extends BaseRepository {
             confidenceScore
         } = patternData;
 
+        // Get personality creator as user_id (learning patterns are per-personality, not per-user)
+        const personality = await this.dal.queryOne('SELECT user_id FROM personalities WHERE id = ?', [personalityId]);
+        
+        if (!personality) {
+            throw this.errorHandler.wrapRepositoryError(
+                new Error('Personality not found'),
+                'Cannot store learning pattern for non-existent personality',
+                { personalityId }
+            );
+        }
+
         // Generate UUID for pattern
         const patternId = `pattern-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -236,11 +271,12 @@ class ProactiveRepository extends BaseRepository {
             INSERT INTO proactive_learning_patterns (
                 id, user_id, personality_id, pattern_type, pattern_data,
                 confidence_score
-            ) VALUES (?, 'default-user', ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?)
         `;
 
         const params = [
             patternId,
+            personality.user_id,
             personalityId,
             patternType,
             typeof data === 'object' ? JSON.stringify(data) : data,

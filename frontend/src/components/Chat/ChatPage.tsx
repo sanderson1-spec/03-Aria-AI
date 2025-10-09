@@ -109,15 +109,15 @@ const ChatPage: React.FC = () => {
     ));
   }, [currentChat, setCurrentChat, setChats]);
 
-  // Load characters when modal opens
+  // Load characters when modal opens (always reload to get latest characters)
   useEffect(() => {
-    if (showNewChatModal && characters.length === 0) {
+    if (showNewChatModal) {
       loadCharacters();
     }
-  }, [showNewChatModal, characters.length, loadCharacters]);
+  }, [showNewChatModal]);
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || !currentChat) return;
+    if (!inputValue.trim() || !currentChat || !user) return;
     
     // Add user message
     const userMessage: Message = {
@@ -164,7 +164,7 @@ const ChatPage: React.FC = () => {
         body: JSON.stringify({
           message: messageContent,
           sessionId: currentChat.id,
-          userId: user?.id || 'default-user',
+          userId: user.id,
           characterId: currentChat.characterId
         })
       });
@@ -339,7 +339,7 @@ const ChatPage: React.FC = () => {
               <h3 className="font-semibold mb-2 text-sm md:text-base">Tasks</h3>
               <CommitmentPanel 
                 chatId={currentChat.id} 
-                userId={user?.id || 'default-user'}
+                userId={user?.id || ''}
                 onVerificationFeedback={handleVerificationFeedback}
               />
             </div>
@@ -347,7 +347,7 @@ const ChatPage: React.FC = () => {
               <h3 className="font-semibold mb-2 text-sm md:text-base">Events</h3>
               <EventsPanel 
                 chatId={currentChat.id} 
-                userId={user?.id || 'default-user'}
+                userId={user?.id || ''}
               />
             </div>
           </div>
