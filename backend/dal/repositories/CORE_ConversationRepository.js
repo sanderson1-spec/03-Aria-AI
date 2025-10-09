@@ -166,6 +166,82 @@ class ConversationRepository extends BaseRepository {
     }
 
     /**
+     * DOMAIN LAYER: Get current conversation state
+     * Calculates real-time conversation metrics and state
+     */
+    async getConversationState(sessionId) {
+        this.validateRequiredFields({ sessionId }, ['sessionId'], 'get conversation state');
+        
+        try {
+            // Helper function to detect greeting in message
+            const isGreeting = (message) => /^(good morning|good evening|good afternoon|hello|hi there|hey|greetings)/i.test(message.trim());
+            
+            // Fetch recent messages
+            const messages = await this.getSessionHistory(sessionId, 100);
+            
+            // Handle empty messages array
+            if (!messages || messages.length === 0) {
+                this.logger.debug('No messages found for conversation state', { sessionId });
+                return {
+                    messages_exchanged: 0,
+                    conversation_started_at: null,
+                    conversation_duration_minutes: 0,
+                    last_message: null,
+                    last_message_sender: null,
+                    last_message_timestamp: null,
+                    last_message_was_question: false,
+                    time_since_last_message_seconds: 0,
+                    user_response_pending: false,
+                    greeting_sent_this_session: false
+                };
+            }
+            
+            // Get first and last messages
+            const firstMessage = messages[0];
+            const lastMessage = messages[messages.length - 1];
+            
+            // Calculate conversation duration
+            const now = new Date();
+            const conversationStartTime = new Date(firstMessage.timestamp);
+            const conversationDurationMinutes = Math.floor((now - conversationStartTime) / (1000 * 60));
+            
+            // Calculate time since last message
+            const lastMessageTime = new Date(lastMessage.timestamp);
+            const timeSinceLastMessageSeconds = Math.floor((now - lastMessageTime) / 1000);
+            
+            // Check if last message was a question
+            const lastMessageWasQuestion = lastMessage.message ? lastMessage.message.includes('?') : false;
+            
+            // Check if user response is pending
+            const userResponsePending = lastMessage.sender === 'assistant' && lastMessageWasQuestion;
+            
+            // Check if greeting was sent this session
+            const greetingSentThisSession = messages.some(m => 
+                m.sender === 'assistant' && m.message && isGreeting(m.message)
+            );
+            
+            const state = {
+                messages_exchanged: messages.length,
+                conversation_started_at: firstMessage.timestamp,
+                conversation_duration_minutes: conversationDurationMinutes,
+                last_message: lastMessage,
+                last_message_sender: lastMessage.sender,
+                last_message_timestamp: lastMessage.timestamp,
+                last_message_was_question: lastMessageWasQuestion,
+                time_since_last_message_seconds: timeSinceLastMessageSeconds,
+                user_response_pending: userResponsePending,
+                greeting_sent_this_session: greetingSentThisSession
+            };
+            
+            this.logger.debug('Conversation state calculated', { sessionId, state });
+            
+            return state;
+        } catch (error) {
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to get conversation state', { sessionId });
+        }
+    }
+
+    /**
      * DOMAIN LAYER: Get recent messages for context building
      * Optimized for conversation context retrieval
      */

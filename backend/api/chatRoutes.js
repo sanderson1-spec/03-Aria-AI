@@ -11,6 +11,18 @@ class ChatRoutes {
         this.setupRoutes();
     }
 
+    // Helper function to format duration
+    formatDuration(timestamp) {
+        if (!timestamp) return 'just now';
+        const minutes = Math.floor((Date.now() - new Date(timestamp).getTime()) / 60000);
+        if (minutes < 1) return 'just now';
+        if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        const days = Math.floor(hours / 24);
+        return `${days} day${days > 1 ? 's' : ''} ago`;
+    }
+
     // Helper function to format messages for prompt
     formatMessages(messages) {
         if (!messages || messages.length === 0) return '(No recent messages)';
@@ -224,6 +236,12 @@ class ChatRoutes {
                     }
                 }
 
+                // Get conversation state for context awareness
+                const conversationState = await databaseService.getDAL().conversations.getConversationState(actualSessionId);
+
+                // Get last 5 messages for conversation flow context
+                const recentMessages = await databaseService.getDAL().conversations.getSessionHistory(actualSessionId, 5);
+
                 // Build unified context (includes recent messages, psychology, memories, commitments, events)
                 const context = await contextBuilder.buildUnifiedContext(userId, actualSessionId, characterId);
 
@@ -255,7 +273,23 @@ ${userProfile.bio ? `About them: ${userProfile.bio}` : ''}
 
 This is baseline information about the user. Reference it naturally without asking for details already provided.
 
-` : ''}RECENT CONVERSATION (last ${context.recentMessages.length} messages):
+` : ''}CONVERSATION CONTEXT:
+- This conversation started ${this.formatDuration(conversationState.conversation_started_at)}
+- Messages exchanged: ${conversationState.messages_exchanged}
+- This is an ONGOING conversation, not a fresh start
+${conversationState.last_message ? `- Your last message: "${conversationState.last_message.message}"` : ''}
+
+CONVERSATION FLOW PRINCIPLES:
+- Remember what you JUST said - don't repeat yourself or contradict recent statements
+- If you asked a question in your last message, you're waiting for their response
+- Don't re-greet unless there's been a significant break (hours/days since last message)
+- Match the natural rhythm of this specific conversation
+- Stay consistent with your recent emotional tone and topics
+
+Recent conversation flow:
+${recentMessages.reverse().map(m => `${m.sender === 'user' ? 'Them' : 'You'}: ${m.message}`).join('\n')}
+
+RECENT CONVERSATION (last ${context.recentMessages.length} messages):
 ${this.formatMessages(context.recentMessages)}
 
 YOUR PSYCHOLOGICAL STATE:
