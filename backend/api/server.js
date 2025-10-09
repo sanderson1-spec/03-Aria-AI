@@ -8,6 +8,7 @@ const LLMSettingsRoutes = require('./llmSettingsRoutes');
 const CommitmentRoutes = require('./commitmentRoutes');
 const EventRoutes = require('./eventRoutes');
 const AuthRoutes = require('./authRoutes');
+const UserRoutes = require('./userRoutes');
 const { setupWebSocketServer } = require('./websocket');
 
 class APIServer {
@@ -77,6 +78,10 @@ class APIServer {
         // Auth routes (public - no auth middleware)
         const authRoutes = new AuthRoutes(this.serviceFactory);
         this.app.use('/api/auth', authRoutes.getRouter());
+
+        // User routes
+        const userRoutes = new UserRoutes(this.serviceFactory);
+        this.app.use('/api/users', userRoutes.getRouter());
 
         // Chat routes
         const chatRoutes = new ChatRoutes(this.serviceFactory);

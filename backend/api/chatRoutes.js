@@ -210,6 +210,20 @@ class ChatRoutes {
                     psychologyState = await psychologyService.initializeCharacterState(userId, characterId);
                 }
 
+                // Get user profile
+                const user = await databaseService.getDAL().users.findById(userId);
+                let userProfile = null;
+                if (user && user.user_profile) {
+                    try {
+                        userProfile = typeof user.user_profile === 'string' 
+                            ? JSON.parse(user.user_profile) 
+                            : user.user_profile;
+                    } catch (parseError) {
+                        // Invalid JSON, continue without profile
+                        userProfile = null;
+                    }
+                }
+
                 // Build unified context (includes recent messages, psychology, memories, commitments, events)
                 const context = await contextBuilder.buildUnifiedContext(userId, actualSessionId, characterId);
 
@@ -234,7 +248,14 @@ ${characterBackground ? `\nBackground: ${characterBackground}` : ''}
 
 ${dateTimeContext}
 
-RECENT CONVERSATION (last ${context.recentMessages.length} messages):
+${userProfile ? `USER PROFILE:
+Name: ${userProfile.name || 'Unknown'}
+${userProfile.birthdate ? `Birthdate: ${userProfile.birthdate}` : ''}
+${userProfile.bio ? `About them: ${userProfile.bio}` : ''}
+
+This is baseline information about the user. Reference it naturally without asking for details already provided.
+
+` : ''}RECENT CONVERSATION (last ${context.recentMessages.length} messages):
 ${this.formatMessages(context.recentMessages)}
 
 YOUR PSYCHOLOGICAL STATE:
@@ -403,6 +424,20 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                     psychologyState = await psychologyService.initializeCharacterState(userId, characterId);
                 }
 
+                // Get user profile
+                const user = await databaseService.getDAL().users.findById(userId);
+                let userProfile = null;
+                if (user && user.user_profile) {
+                    try {
+                        userProfile = typeof user.user_profile === 'string' 
+                            ? JSON.parse(user.user_profile) 
+                            : user.user_profile;
+                    } catch (parseError) {
+                        // Invalid JSON, continue without profile
+                        userProfile = null;
+                    }
+                }
+
                 // Prepare context for LLM with character-specific information
                 const characterBackground = character.definition || '';
                 const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
@@ -411,7 +446,14 @@ ${characterBackground ? `\nBackground: ${characterBackground}` : ''}
 
 ${dateTimeContext}
 
-Current psychology state: mood=${psychologyState.mood || 'neutral'}, engagement=${psychologyState.engagement || 'moderate'}, energy=${psychologyState.energy || 75}.
+${userProfile ? `USER PROFILE:
+Name: ${userProfile.name || 'Unknown'}
+${userProfile.birthdate ? `Birthdate: ${userProfile.birthdate}` : ''}
+${userProfile.bio ? `About them: ${userProfile.bio}` : ''}
+
+This is baseline information about the user. Reference it naturally without asking for details already provided.
+
+` : ''}Current psychology state: mood=${psychologyState.mood || 'neutral'}, engagement=${psychologyState.engagement || 'moderate'}, energy=${psychologyState.energy || 75}.
 Stay in character as ${character.name}. Adapt your response based on this psychological context and your character traits. You are fully aware of the current date and time as provided above.`;
 
                 let fullAiResponse = '';
