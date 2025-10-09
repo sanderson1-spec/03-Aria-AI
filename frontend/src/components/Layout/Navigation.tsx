@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CollapsibleConversationList } from './CollapsibleConversationList';
 import { useAuth } from '../../contexts/AuthContext';
+import UserProfileModal from '../UserProfile/UserProfileModal';
+import { API_BASE_URL } from '../../config/api';
 
 interface Chat {
   id: string;
@@ -35,6 +37,31 @@ const Navigation: React.FC<NavigationProps> = ({
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ name?: string; birthdate?: string; bio?: string }>({ name: '', birthdate: '', bio: '' });
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user) return;
+      
+      try {
+        const token = localStorage.getItem('aria-session-token');
+        const response = await fetch(`${API_BASE_URL}/api/users/profile?userId=${user.id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const data = await response.json();
+        if (data.success) {
+          setUserProfile(data.profile || {});
+        }
+      } catch (err) {
+        console.error('Failed to load user profile:', err);
+      }
+    };
+    
+    loadProfile();
+  }, [user]);
 
   const navItems = [
     { path: '/', label: 'Chat', icon: '💬' },
@@ -60,6 +87,34 @@ const Navigation: React.FC<NavigationProps> = ({
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const handleProfileSave = async (profile: { name: string; birthdate?: string; bio?: string }) => {
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    const token = localStorage.getItem('aria-session-token');
+    const response = await fetch(`${API_BASE_URL}/api/users/profile`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ 
+        userId: user.id,
+        profile 
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      setUserProfile(profile);
+      setShowProfileModal(false);
+    } else {
+      throw new Error(data.error || 'Failed to save profile');
+    }
   };
 
   return (
@@ -149,6 +204,18 @@ const Navigation: React.FC<NavigationProps> = ({
           {showUserMenu && (
             <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2">
               <button
+                onClick={() => {
+                  setShowProfileModal(true);
+                  setShowUserMenu(false);
+                }}
+                className="w-full flex items-center space-x-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>User Profile</span>
+              </button>
+              <button
                 onClick={handleLogout}
                 className="w-full flex items-center space-x-2 px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors"
               >
@@ -161,6 +228,14 @@ const Navigation: React.FC<NavigationProps> = ({
           )}
         </div>
       </div>
+
+      {/* User Profile Modal */}
+      <UserProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        currentProfile={userProfile}
+        onSave={handleProfileSave}
+      />
     </div>
   );
 };
