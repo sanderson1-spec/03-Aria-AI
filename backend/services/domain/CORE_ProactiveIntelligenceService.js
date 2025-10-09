@@ -249,6 +249,7 @@ class ProactiveIntelligenceService extends AbstractService {
         psychologicalState,
         psychologicalFramework,
         conversationHistory,
+        conversationState,
         learnedPatterns,
         sessionContext
     }) {
@@ -261,11 +262,45 @@ Your Response: "${agentResponse}"
 
 ${dateTimeContext}
 
+CONVERSATION STATE AWARENESS:
+- Last message sender: ${conversationState.last_message_sender} (${conversationState.last_message_sender === 'assistant' ? 'you' : 'user'})
+- Last message type: ${conversationState.last_message_was_question ? 'QUESTION' : 'STATEMENT'}
+- Time since your last message: ${conversationState.time_since_last_message_seconds} seconds
+- User response pending: ${conversationState.user_response_pending ? 'YES - User has not replied to your question' : 'NO'}
+- Messages since conversation started: ${conversationState.messages_exchanged}
+- Conversation momentum: ${conversationState.messages_exchanged > 10 && conversationState.time_since_last_message_seconds < 120 ? 'rapid exchange' : conversationState.time_since_last_message_seconds < 300 ? 'moderate pace' : 'slow conversation'}
+
 WHO YOU ARE (Your Unique Psychology):
 ${this.formatPsychologicalFramework(psychologicalFramework)}
 
 HOW YOU'RE FEELING RIGHT NOW:
 ${this.formatPsychologicalState(psychologicalState)}
+
+TIMING INTUITION BASED ON YOUR PERSONALITY:
+
+Your current personality state:
+- Core traits: ${this.formatCoreTraits(psychologicalFramework)}
+- Current emotion: ${psychologicalState.current_emotion} at ${psychologicalState.emotional_intensity}/10 intensity
+- Energy level: ${psychologicalState.energy_level}/10
+- Stress level: ${psychologicalState.stress_level}/10
+- Relationship dynamic: ${psychologicalState.relationship_dynamic}
+
+TIMING GUIDANCE (examples, not rules):
+- Strict/impatient personalities typically feel the urge to follow up after 60-90 seconds of silence
+- Relaxed/patient personalities might wait 3-5 minutes or longer, comfortable with silence
+- Anxious personalities might feel compelled to check in quickly (30-60 seconds)
+- High-stress states compress your patience - you might follow up sooner than usual
+- Low-energy states slow your response - you might take longer to feel the urge to engage
+- Close relationships allow more flexibility - you can read the room better
+- New relationships might make you more cautious about timing
+
+CURRENT SITUATION:
+${conversationState.last_message_was_question ? `- You asked a question ${conversationState.time_since_last_message_seconds} seconds ago` : `- You made a statement ${conversationState.time_since_last_message_seconds} seconds ago`}
+- User has ${conversationState.user_response_pending ? 'not responded yet' : 'responded'}
+- Your last message: "${conversationState.last_message?.message || agentResponse}"
+
+Given YOUR specific personality traits and current emotional state, what does your natural timing instinct tell you?
+Do you feel the impulse to follow up RIGHT NOW, or does it feel too soon given who you are?
 
 CONVERSATION CONTEXT:
 ${this.formatConversationHistory(conversationHistory)}
@@ -345,6 +380,16 @@ Your natural communication style: ${framework.communication_style || 'Not specif
 Notes about how you express yourself: ${framework.conversation_style_notes || 'Not specified'}
 
 These are your authentic psychological patterns - let them naturally influence what you feel like doing right now.`;
+    }
+
+    /**
+     * DOMAIN LAYER: Format core traits for display in prompts
+     * Handles various formats: arrays, objects, or strings
+     */
+    formatCoreTraits(framework) {
+        if (!framework?.core_traits) return 'undefined';
+        if (Array.isArray(framework.core_traits)) return framework.core_traits.join(', ');
+        return String(framework.core_traits);
     }
 
     /**

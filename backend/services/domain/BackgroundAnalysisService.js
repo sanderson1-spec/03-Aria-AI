@@ -146,6 +146,9 @@ class BackgroundAnalysisService extends AbstractService {
      */
     async _runProactiveAnalysis(sessionId, userId, characterId, userMessage, aiResponse, psychologyState, character, conversationHistory) {
         try {
+            // Get conversation state for timing context
+            const conversationState = await this.dal.conversations.getConversationState(sessionId);
+            
             // Analyze proactive opportunity
             const decision = await this.proactiveIntelligence.analyzeProactiveOpportunity({
                 userMessage,
@@ -153,6 +156,7 @@ class BackgroundAnalysisService extends AbstractService {
                 psychologicalState: psychologyState,
                 psychologicalFramework: character,
                 conversationHistory,
+                conversationState,
                 learnedPatterns: [], // TODO: Implement pattern retrieval
                 sessionContext: {
                     sessionId,
