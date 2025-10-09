@@ -505,7 +505,7 @@ class PsychologyRepository extends BaseRepository {
                 (cmw.emotional_impact_score + cmw.relationship_relevance + 
                  cmw.personal_significance + cmw.contextual_importance) as total_significance
             FROM character_memory_weights cmw
-            JOIN conversation_logs cl ON cmw.message_id = cl.id AND cmw.session_id = cl.session_id
+            JOIN conversation_logs cl ON cmw.message_id = cl.id AND cmw.session_id = cl.chat_id
             WHERE cmw.session_id = ?
             ORDER BY total_significance DESC, cmw.recall_frequency DESC
             LIMIT ?
@@ -551,7 +551,7 @@ class PsychologyRepository extends BaseRepository {
                     (cmw.emotional_impact_score + cmw.relationship_relevance + 
                      cmw.personal_significance + cmw.contextual_importance) as total_significance
                 FROM character_memory_weights cmw
-                JOIN conversation_logs cl ON cmw.message_id = cl.id AND cmw.session_id = cl.session_id
+                JOIN conversation_logs cl ON cmw.message_id = cl.id AND cmw.session_id = cl.chat_id
                 WHERE cmw.session_id = ?
                 ${excludePlaceholders}
                 AND (
@@ -769,8 +769,8 @@ class PsychologyRepository extends BaseRepository {
                 (cmw.emotional_impact_score + cmw.relationship_relevance + 
                  cmw.personal_significance + cmw.contextual_importance) as total_significance
             FROM conversation_logs cl
-            LEFT JOIN character_memory_weights cmw ON cl.id = cmw.message_id AND cl.session_id = cmw.session_id
-            WHERE cl.session_id = ?
+            LEFT JOIN character_memory_weights cmw ON cl.id = cmw.message_id AND cl.chat_id = cmw.session_id
+            WHERE cl.chat_id = ?
             ORDER BY 
                 CASE WHEN cmw.id IS NOT NULL THEN total_significance ELSE 0 END DESC,
                 cl.timestamp DESC

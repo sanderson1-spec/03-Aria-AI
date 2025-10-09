@@ -138,7 +138,7 @@ class CORE_LLMConfigService extends AbstractService {
      */
     async getCharacterLLMPreferences(characterId) {
         try {
-            const character = await this.dal.characters.findById(characterId);
+            const character = await this.dal.personalities.getCharacter(characterId);
             if (!character) {
                 this.logger.warn('Character not found when fetching LLM preferences', 'LLMConfig', { characterId });
                 return null;
@@ -163,7 +163,7 @@ class CORE_LLMConfigService extends AbstractService {
      */
     async setCharacterLLMPreferences(characterId, preferences) {
         try {
-            await this.dal.characters.updateLLMPreferences(characterId, preferences);
+            await this.dal.personalities.updateCharacter(characterId, { llm_preferences: preferences });
             this.logger.info('Updated character LLM preferences', 'LLMConfig', { characterId });
         } catch (error) {
             throw this.errorHandler.wrapDomainError(error, 'Failed to set character LLM preferences', { characterId });

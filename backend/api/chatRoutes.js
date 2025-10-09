@@ -53,6 +53,61 @@ class ChatRoutes {
         return completions.map(c => `- ${c.title} (${c.type}, completed: ${c.completed_at || c.updated_at})`).join('\n');
     }
 
+    // Shared method to build system prompt - used by both streaming and non-streaming routes
+    buildSystemPrompt(character, characterBackground, dateTimeContext, userProfile, conversationState, recentMessages, context, deepMemories) {
+        return `You are ${character.name}, ${character.description}
+${characterBackground ? `\nBackground: ${characterBackground}` : ''}
+
+${dateTimeContext}
+
+${userProfile ? `USER PROFILE:
+Name: ${userProfile.name || 'Unknown'}
+${userProfile.birthdate ? `Birthdate: ${userProfile.birthdate}` : ''}
+${userProfile.bio ? `About them: ${userProfile.bio}` : ''}
+
+This is baseline information about the user. Reference it naturally without asking for details already provided.
+
+` : ''}CONVERSATION CONTEXT:
+- This conversation started ${this.formatDuration(conversationState.conversation_started_at)}
+- Messages exchanged: ${conversationState.messages_exchanged}
+- This is an ONGOING conversation, not a fresh start
+${conversationState.last_message ? `- Your last message: "${conversationState.last_message.message}"` : ''}
+
+CONVERSATION FLOW PRINCIPLES:
+- Remember what you JUST said - don't repeat yourself or contradict recent statements
+- If you asked a question in your last message, you're waiting for their response
+- Don't re-greet unless there's been a significant break (hours/days since last message)
+- Match the natural rhythm of this specific conversation
+- Stay consistent with your recent emotional tone and topics
+
+Recent conversation flow:
+${recentMessages.reverse().map(m => `${m.sender === 'user' ? 'Them' : 'You'}: ${m.message}`).join('\n')}
+
+RECENT CONVERSATION (last ${context.recentMessages.length} messages):
+${this.formatMessages(context.recentMessages)}
+
+YOUR PSYCHOLOGICAL STATE:
+- Mood: ${context.psychologyState?.current_emotion || 'neutral'}
+- Energy: ${context.psychologyState?.energy_level || 5}/10
+- Relationship: ${context.psychologyState?.relationship_dynamic || 'developing'}
+
+TOP MEMORIES:
+${this.formatMemories(context.topMemories)}
+
+${deepMemories && deepMemories.length > 0 ? `RELEVANT PAST MEMORIES:
+${this.formatMemories(deepMemories)}
+` : ''}ACTIVE COMMITMENTS:
+${this.formatCommitments(context.activeCommitments)}
+
+UPCOMING EVENTS:
+${this.formatEvents(context.upcomingEvents)}
+
+RECENT COMPLETIONS:
+${this.formatCompletions(context.recentCompletions)}
+
+Stay in character as ${character.name}. You have complete awareness of all this context.`;
+    }
+
     setupRoutes() {
         // CORS is handled by main server middleware
 
@@ -261,58 +316,17 @@ class ChatRoutes {
                 const characterBackground = character.definition || '';
                 const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
                 
-                const systemPrompt = `You are ${character.name}, ${character.description}
-${characterBackground ? `\nBackground: ${characterBackground}` : ''}
-
-${dateTimeContext}
-
-${userProfile ? `USER PROFILE:
-Name: ${userProfile.name || 'Unknown'}
-${userProfile.birthdate ? `Birthdate: ${userProfile.birthdate}` : ''}
-${userProfile.bio ? `About them: ${userProfile.bio}` : ''}
-
-This is baseline information about the user. Reference it naturally without asking for details already provided.
-
-` : ''}CONVERSATION CONTEXT:
-- This conversation started ${this.formatDuration(conversationState.conversation_started_at)}
-- Messages exchanged: ${conversationState.messages_exchanged}
-- This is an ONGOING conversation, not a fresh start
-${conversationState.last_message ? `- Your last message: "${conversationState.last_message.message}"` : ''}
-
-CONVERSATION FLOW PRINCIPLES:
-- Remember what you JUST said - don't repeat yourself or contradict recent statements
-- If you asked a question in your last message, you're waiting for their response
-- Don't re-greet unless there's been a significant break (hours/days since last message)
-- Match the natural rhythm of this specific conversation
-- Stay consistent with your recent emotional tone and topics
-
-Recent conversation flow:
-${recentMessages.reverse().map(m => `${m.sender === 'user' ? 'Them' : 'You'}: ${m.message}`).join('\n')}
-
-RECENT CONVERSATION (last ${context.recentMessages.length} messages):
-${this.formatMessages(context.recentMessages)}
-
-YOUR PSYCHOLOGICAL STATE:
-- Mood: ${context.psychologyState?.current_emotion || 'neutral'}
-- Energy: ${context.psychologyState?.energy_level || 5}/10
-- Relationship: ${context.psychologyState?.relationship_dynamic || 'developing'}
-
-TOP MEMORIES:
-${this.formatMemories(context.topMemories)}
-
-${deepMemories && deepMemories.length > 0 ? `RELEVANT PAST MEMORIES:
-${this.formatMemories(deepMemories)}
-` : ''}
-ACTIVE COMMITMENTS:
-${this.formatCommitments(context.activeCommitments)}
-
-UPCOMING EVENTS:
-${this.formatEvents(context.upcomingEvents)}
-
-RECENT COMPLETIONS:
-${this.formatCompletions(context.recentCompletions)}
-
-Stay in character as ${character.name}. You have complete awareness of all this context.`;
+                // Use shared method to build system prompt
+                const systemPrompt = this.buildSystemPrompt(
+                    character,
+                    characterBackground,
+                    dateTimeContext,
+                    userProfile,
+                    conversationState,
+                    recentMessages,
+                    context,
+                    deepMemories
+                );
 
                 // Generate AI response using LLM service (convert to string format)
                 const fullPrompt = `${systemPrompt}\n\nUser: ${message}\n${character.name}:`;
@@ -407,6 +421,8 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 const proactiveIntelligence = this.serviceFactory.get('proactiveIntelligence');
                 const proactiveLearning = this.serviceFactory.get('proactiveLearning');
                 const databaseService = this.serviceFactory.get('database');
+                const contextBuilder = this.serviceFactory.get('contextBuilder');
+                const memorySearch = this.serviceFactory.get('memorySearch');
 
                 // Create or get session
                 const actualSessionId = sessionId || uuidv4();
@@ -472,23 +488,64 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                     }
                 }
 
-                // Prepare context for LLM with character-specific information
+                // Get conversation state for context awareness
+                let conversationState, recentMessages, context, deepMemories;
+                
+                try {
+                    conversationState = await databaseService.getDAL().conversations.getConversationState(actualSessionId);
+                    recentMessages = await databaseService.getDAL().conversations.getSessionHistory(actualSessionId, 5);
+                    context = await contextBuilder.buildUnifiedContext(userId, actualSessionId, characterId);
+                    
+                    // Get recent message IDs for exclusion in deep search
+                    const recentMessageIds = context.recentMessages.map(m => m.id).filter(id => id);
+                    
+                    // Execute deep memory search (significance threshold from config, default 7)
+                    const significanceThreshold = 7;
+                    deepMemories = await memorySearch.executeDeepSearch(
+                        actualSessionId, 
+                        message, 
+                        recentMessageIds, 
+                        significanceThreshold
+                    );
+                } catch (contextError) {
+                    // Fallback to minimal context if full context fails
+                    console.error('Failed to build full context, using minimal fallback:', contextError.message);
+                    
+                    conversationState = {
+                        conversation_started_at: new Date().toISOString(),
+                        messages_exchanged: 0,
+                        last_message: null
+                    };
+                    
+                    recentMessages = [];
+                    
+                    context = {
+                        recentMessages: [],
+                        psychologyState: psychologyState,
+                        topMemories: [],
+                        activeCommitments: [],
+                        upcomingEvents: [],
+                        recentCompletions: []
+                    };
+                    
+                    deepMemories = [];
+                }
+
+                // Prepare comprehensive context for LLM
                 const characterBackground = character.definition || '';
                 const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
-                const systemPrompt = `You are ${character.name}, ${character.description}
-${characterBackground ? `\nBackground: ${characterBackground}` : ''}
-
-${dateTimeContext}
-
-${userProfile ? `USER PROFILE:
-Name: ${userProfile.name || 'Unknown'}
-${userProfile.birthdate ? `Birthdate: ${userProfile.birthdate}` : ''}
-${userProfile.bio ? `About them: ${userProfile.bio}` : ''}
-
-This is baseline information about the user. Reference it naturally without asking for details already provided.
-
-` : ''}Current psychology state: mood=${psychologyState.mood || 'neutral'}, engagement=${psychologyState.engagement || 'moderate'}, energy=${psychologyState.energy || 75}.
-Stay in character as ${character.name}. Adapt your response based on this psychological context and your character traits. You are fully aware of the current date and time as provided above.`;
+                
+                // Use shared method to build system prompt
+                const systemPrompt = this.buildSystemPrompt(
+                    character,
+                    characterBackground,
+                    dateTimeContext,
+                    userProfile,
+                    conversationState,
+                    recentMessages,
+                    context,
+                    deepMemories
+                );
 
                 let fullAiResponse = '';
 

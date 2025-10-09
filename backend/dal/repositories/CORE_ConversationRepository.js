@@ -300,7 +300,7 @@ class ConversationRepository extends BaseRepository {
     async searchConversationHistory(sessionId, criteria = {}) {
         this.validateRequiredFields({ sessionId }, ['sessionId'], 'search conversation');
         
-        const conditions = { session_id: sessionId };
+        const conditions = { chat_id: sessionId };
         
         if (criteria.keywords && criteria.keywords.length > 0) {
             // Note: This is a limitation of the current domain method approach
@@ -382,7 +382,7 @@ class ConversationRepository extends BaseRepository {
                 COUNT(CASE WHEN message_type = 'question' THEN 1 END) as questions,
                 COUNT(CASE WHEN message_type = 'answer' THEN 1 END) as answers
             FROM ${this.conversationTable}
-            WHERE session_id = ? AND timestamp >= ?
+            WHERE chat_id = ? AND timestamp >= ?
         `;
         
         return await super.queryOne(sql, [sessionId, cutoffDate.toISOString()]);
@@ -443,8 +443,8 @@ class ConversationRepository extends BaseRepository {
                  COALESCE(cmw.personal_significance, 5) + 
                  COALESCE(cmw.contextual_importance, 5)) as total_weight
             FROM ${this.conversationTable} cl
-            LEFT JOIN ${this.memoryWeightsTable} cmw ON cl.id = cmw.message_id AND cl.session_id = cmw.session_id
-            WHERE cl.session_id = ?
+            LEFT JOIN ${this.memoryWeightsTable} cmw ON cl.id = cmw.message_id AND cl.chat_id = cmw.session_id
+            WHERE cl.chat_id = ?
             ${minTotalWeight > 0 ? 'HAVING total_weight >= ?' : ''}
             ORDER BY 
                 total_weight DESC,
@@ -542,7 +542,7 @@ class ConversationRepository extends BaseRepository {
                 cmw.emotional_impact_score,
                 cmw.last_recalled
             FROM ${this.memoryWeightsTable} cmw
-            JOIN ${this.conversationTable} cl ON cmw.message_id = cl.id AND cmw.session_id = cl.session_id
+            JOIN ${this.conversationTable} cl ON cmw.message_id = cl.id AND cmw.session_id = cl.chat_id
             WHERE cmw.session_id = ? AND cmw.recall_frequency > 0
             ORDER BY cmw.recall_frequency DESC, cmw.last_recalled DESC
             LIMIT ?
@@ -575,7 +575,7 @@ class ConversationRepository extends BaseRepository {
                 COUNT(DISTINCT topic_id) as topics_per_day,
                 AVG(LENGTH(message)) as avg_message_length
             FROM ${this.conversationTable}
-            WHERE session_id = ? AND timestamp >= ?
+            WHERE chat_id = ? AND timestamp >= ?
             GROUP BY DATE(timestamp)
             ORDER BY conversation_date DESC
         `;
@@ -599,7 +599,7 @@ class ConversationRepository extends BaseRepository {
                 MIN(timestamp) as first_mention,
                 MAX(timestamp) as last_mention
             FROM ${this.conversationTable}
-            WHERE session_id = ? AND topic_id IS NOT NULL
+            WHERE chat_id = ? AND topic_id IS NOT NULL
             GROUP BY topic_id
             ORDER BY message_count DESC, avg_relevance DESC
             LIMIT ?
@@ -794,7 +794,7 @@ class ConversationRepository extends BaseRepository {
             [chatId]
         );
         
-        // Delete memory weights (using correct column name: session_id is still correct here)
+        // Delete memory weights (column is session_id, value is chatId)
         await this.dal.execute(
             `DELETE FROM character_memory_weights WHERE session_id = ?`, 
             [chatId]
@@ -931,7 +931,7 @@ class ConversationRepository extends BaseRepository {
         
         return await super.executeInTransaction(async () => {
             const weightResult = await super.delete(this.memoryWeightsTable, 'session_id = ?', [sessionId]);
-            const messageResult = await super.delete(this.conversationTable, 'session_id = ?', [sessionId]);
+            const messageResult = await super.delete(this.conversationTable, 'chat_id = ?', [sessionId]);
             
             return {
                 deletedMessages: messageResult.deletedCount,
