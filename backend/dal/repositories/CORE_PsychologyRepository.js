@@ -293,28 +293,28 @@ class PsychologyRepository extends BaseRepository {
     /**
      * DOMAIN LAYER: Update psychological state for session
      */
-    async updatePsychologicalState(sessionId, personalityId, stateData) {
+    async updatePsychologicalState(chatId, personalityId, stateData) {
         this.validateRequiredFields(
-            { sessionId, personalityId, stateData },
-            ['sessionId', 'personalityId', 'stateData'],
+            { chatId, personalityId, stateData },
+            ['chatId', 'personalityId', 'stateData'],
             'update psychological state'
         );
 
-        // Get user_id from chat (sessionId is actually chatId in most cases)
-        const chat = await this.dal.queryOne('SELECT user_id FROM chats WHERE id = ?', [sessionId]);
+        // Get user_id from chat (chatId is actually chatId in most cases)
+        const chat = await this.dal.queryOne('SELECT user_id FROM chats WHERE id = ?', [chatId]);
         
         if (!chat) {
             throw this.errorHandler.wrapRepositoryError(
                 new Error('Chat not found'),
                 'Cannot update psychological state for non-existent chat',
-                { sessionId, personalityId }
+                { chatId, personalityId }
             );
         }
         
         const userId = chat.user_id;
 
         const stateRecord = {
-            session_id: sessionId,
+            session_id: chatId,
             personality_id: personalityId,
             user_id: userId,
             current_emotion: stateData.current_emotion || 'neutral',
@@ -362,16 +362,16 @@ class PsychologyRepository extends BaseRepository {
     /**
      * DOMAIN LAYER: Get psychological state for session
      */
-    async getPsychologicalState(sessionId) {
+    async getPsychologicalState(chatId) {
         this.validateRequiredFields(
-            { sessionId }, 
-            ['sessionId'], 
+            { chatId }, 
+            ['chatId'], 
             'get psychological state'
         );
         
         const result = await this.dal.queryOne(
             'SELECT * FROM character_psychological_state WHERE session_id = ?',
-            [sessionId]
+            [chatId]
         );
 
         if (result) {
@@ -392,10 +392,10 @@ class PsychologyRepository extends BaseRepository {
     /**
      * DOMAIN LAYER: Get psychological state summary for session
      */
-    async getPsychologyStateSummary(sessionId) {
+    async getPsychologyStateSummary(chatId) {
         this.validateRequiredFields(
-            { sessionId }, 
-            ['sessionId'], 
+            { chatId }, 
+            ['chatId'], 
             'get psychology state summary'
         );
 
@@ -411,7 +411,7 @@ class PsychologyRepository extends BaseRepository {
             WHERE cps.session_id = ?
         `;
 
-        const result = await this.dal.queryOne(sql, [sessionId]);
+        const result = await this.dal.queryOne(sql, [chatId]);
         
         if (result) {
             try {
@@ -433,16 +433,28 @@ class PsychologyRepository extends BaseRepository {
     /**
      * DOMAIN LAYER: Save memory weight for message
      */
-    async saveMemoryWeight(sessionId, messageId, weightData) {
+    async saveMemoryWeight(chatId, messageId, weightData) {
         this.validateRequiredFields(
-            { sessionId, messageId, weightData },
-            ['sessionId', 'messageId', 'weightData'],
+            { chatId, messageId, weightData },
+            ['chatId', 'messageId', 'weightData'],
             'save memory weight'
         );
 
+        // FIX: Get user_id from chat
+        const chat = await this.dal.queryOne('SELECT user_id FROM chats WHERE id = ?', [chatId]);
+        
+        if (!chat) {
+            throw this.errorHandler.wrapRepositoryError(
+                new Error('Chat not found'),
+                'Cannot save memory weight for non-existent chat',
+                { chatId }
+            );
+        }
+
         const memoryWeight = {
             id: this.generateId(),
-            session_id: sessionId,
+            session_id: chatId,
+            user_id: chat.user_id,  // FIX: Add user_id
             message_id: messageId,
             emotional_impact_score: weightData.emotional_impact_score || 5,
             relationship_relevance: weightData.relationship_relevance || 5,
@@ -457,17 +469,19 @@ class PsychologyRepository extends BaseRepository {
             updated_at: this.getCurrentTimestamp()
         };
 
+        // FIX: Add user_id to column list
         const sql = `
             INSERT OR REPLACE INTO character_memory_weights (
-                id, session_id, message_id, emotional_impact_score, relationship_relevance,
+                id, session_id, user_id, message_id, emotional_impact_score, relationship_relevance,
                 personal_significance, contextual_importance, accessibility_score, memory_type, memory_tags,
                 recall_frequency, last_recalled, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const result = await this.dal.query(sql, [
             memoryWeight.id,
             memoryWeight.session_id,
+            memoryWeight.user_id,  // FIX: Add user_id parameter
             memoryWeight.message_id,
             memoryWeight.emotional_impact_score,
             memoryWeight.relationship_relevance,
@@ -488,19 +502,18 @@ class PsychologyRepository extends BaseRepository {
     /**
      * DOMAIN LAYER: Get weighted memories for session
      */
-    async getWeightedMemories(sessionId, limit = 10) {
+    async getWeightedMemories(chatId, limit = 10) {
         this.validateRequiredFields(
-            { sessionId }, 
-            ['sessionId'], 
+            { chatId }, 
+            ['chatId'], 
             'get weighted memories'
         );
 
         const sql = `
             SELECT 
                 cmw.*,
-                cmw.accessibility_score,
-                cl.message,
-                cl.sender,
+                cl.content as message,
+                cl.role as sender,
                 cl.timestamp,
                 (cmw.emotional_impact_score + cmw.relationship_relevance + 
                  cmw.personal_significance + cmw.contextual_importance) as total_significance
@@ -511,7 +524,7 @@ class PsychologyRepository extends BaseRepository {
             LIMIT ?
         `;
 
-        const results = await this.dal.query(sql, [sessionId, limit]);
+        const results = await this.dal.query(sql, [chatId, limit]);
         
         // Parse JSON fields
         return results.map(result => {
@@ -529,11 +542,11 @@ class PsychologyRepository extends BaseRepository {
      * DOMAIN LAYER: Get significant memories above threshold, excluding recent messages
      * Used for deep memory search - returns ALL significant memories without limit
      */
-    async getSignificantMemories(sessionId, excludeMessageIds, significanceThreshold) {
+    async getSignificantMemories(chatId, excludeMessageIds, significanceThreshold) {
         try {
             this.validateRequiredFields(
-                { sessionId, excludeMessageIds, significanceThreshold }, 
-                ['sessionId', 'excludeMessageIds', 'significanceThreshold'], 
+                { chatId, excludeMessageIds, significanceThreshold }, 
+                ['chatId', 'excludeMessageIds', 'significanceThreshold'], 
                 'get significant memories'
             );
 
@@ -545,8 +558,8 @@ class PsychologyRepository extends BaseRepository {
             const sql = `
                 SELECT 
                     cmw.*,
-                    cl.message as content,
-                    cl.sender,
+                    cl.content,
+                    cl.role as sender,
                     cl.timestamp,
                     (cmw.emotional_impact_score + cmw.relationship_relevance + 
                      cmw.personal_significance + cmw.contextual_importance) as total_significance
@@ -564,7 +577,7 @@ class PsychologyRepository extends BaseRepository {
             `;
 
             const params = [
-                sessionId, 
+                chatId, 
                 ...excludeMessageIds, 
                 significanceThreshold, 
                 significanceThreshold, 
@@ -588,7 +601,7 @@ class PsychologyRepository extends BaseRepository {
             throw this.errorHandler.wrapRepositoryError(
                 error, 
                 'Failed to get significant memories', 
-                { sessionId, excludeCount: excludeMessageIds.length, significanceThreshold }
+                { chatId, excludeCount: excludeMessageIds.length, significanceThreshold }
             );
         }
     }
@@ -596,10 +609,10 @@ class PsychologyRepository extends BaseRepository {
     /**
      * DOMAIN LAYER: Update memory recall frequency
      */
-    async updateMemoryRecall(sessionId, messageId) {
+    async updateMemoryRecall(chatId, messageId) {
         this.validateRequiredFields(
-            { sessionId, messageId },
-            ['sessionId', 'messageId'],
+            { chatId, messageId },
+            ['chatId', 'messageId'],
             'update memory recall'
         );
 
@@ -614,7 +627,7 @@ class PsychologyRepository extends BaseRepository {
         return await this.dal.query(sql, [
             this.getCurrentTimestamp(),
             this.getCurrentTimestamp(),
-            sessionId,
+            chatId,
             messageId
         ]);
     }
@@ -622,10 +635,10 @@ class PsychologyRepository extends BaseRepository {
     /**
      * DOMAIN LAYER: Update memory accessibility score
      */
-    async updateMemoryAccessibility(sessionId, messageId, newScore) {
+    async updateMemoryAccessibility(chatId, messageId, newScore) {
         this.validateRequiredFields(
-            { sessionId, messageId, newScore },
-            ['sessionId', 'messageId', 'newScore'],
+            { chatId, messageId, newScore },
+            ['chatId', 'messageId', 'newScore'],
             'update memory accessibility'
         );
 
@@ -639,7 +652,7 @@ class PsychologyRepository extends BaseRepository {
         return await this.dal.query(sql, [
             newScore,
             this.getCurrentTimestamp(),
-            sessionId,
+            chatId,
             messageId
         ]);
     }
@@ -651,28 +664,28 @@ class PsychologyRepository extends BaseRepository {
     /**
      * DOMAIN LAYER: Log psychology evolution/change
      */
-    async logPsychologyEvolution(sessionId, personalityId, changeType, evolutionData) {
+    async logPsychologyEvolution(chatId, personalityId, changeType, evolutionData) {
         this.validateRequiredFields(
-            { sessionId, personalityId, changeType, evolutionData },
-            ['sessionId', 'personalityId', 'changeType', 'evolutionData'],
+            { chatId, personalityId, changeType, evolutionData },
+            ['chatId', 'personalityId', 'changeType', 'evolutionData'],
             'log psychology evolution'
         );
 
-        // Get userId from session
-        const session = await this.dal.queryOne(
-            'SELECT user_id FROM sessions WHERE id = ?',
-            [sessionId]
+        // Get userId from chat (chatId is actually chatId in this context)
+        const chat = await this.dal.queryOne(
+            'SELECT user_id FROM chats WHERE id = ?',
+            [chatId]
         );
         
-        if (!session || !session.user_id) {
-            throw new Error(`Cannot log psychology evolution: session ${sessionId} not found or has no user_id`);
+        if (!chat || !chat.user_id) {
+            throw new Error(`Cannot log psychology evolution: chat ${chatId} not found or has no user_id`);
         }
 
         const evolutionLog = {
             id: this.generateId(),
-            session_id: sessionId,
+            session_id: chatId,
             personality_id: personalityId,
-            user_id: session.user_id,
+            user_id: chat.user_id,
             previous_state: JSON.stringify(evolutionData.previous_state || {}),
             new_state: JSON.stringify(evolutionData.new_state || {}),
             trigger_message: evolutionData.trigger_message || '',
@@ -712,10 +725,10 @@ class PsychologyRepository extends BaseRepository {
     /**
      * DOMAIN LAYER: Get psychology evolution history
      */
-    async getPsychologyEvolution(sessionId, limit = 20) {
+    async getPsychologyEvolution(chatId, limit = 20) {
         this.validateRequiredFields(
-            { sessionId }, 
-            ['sessionId'], 
+            { chatId }, 
+            ['chatId'], 
             'get psychology evolution'
         );
 
@@ -726,7 +739,7 @@ class PsychologyRepository extends BaseRepository {
             LIMIT ?
         `;
 
-        const results = await this.dal.query(sql, [sessionId, limit]);
+        const results = await this.dal.query(sql, [chatId, limit]);
         
         // Parse JSON fields
         return results.map(result => {
@@ -750,10 +763,10 @@ class PsychologyRepository extends BaseRepository {
      * DOMAIN LAYER: Get conversation context specifically for psychology analysis
      * This retrieves conversation history with weighting information
      */
-    async getConversationContextForPsychology(sessionId, maxMessages = 10) {
+    async getConversationContextForPsychology(chatId, maxMessages = 10) {
         this.validateRequiredFields(
-            { sessionId }, 
-            ['sessionId'], 
+            { chatId }, 
+            ['chatId'], 
             'get conversation context for psychology'
         );
 
@@ -777,7 +790,7 @@ class PsychologyRepository extends BaseRepository {
             LIMIT ?
         `;
 
-        const results = await this.dal.query(sql, [sessionId, maxMessages]);
+        const results = await this.dal.query(sql, [chatId, maxMessages]);
         
         // Parse JSON fields and format for psychology analysis
         return results.map(result => {

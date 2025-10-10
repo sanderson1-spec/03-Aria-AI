@@ -43,3 +43,4 @@ SELECT COUNT(*) as chats_count FROM chats;
 
 
 
+

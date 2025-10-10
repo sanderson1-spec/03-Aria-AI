@@ -75,7 +75,7 @@ class ProactiveDeliveryService extends AbstractService {
      */
     async processProactiveDecision(decision, context) {
         this.logger.info('Processing proactive decision', 'ProactiveDelivery', {
-            sessionId: context.sessionId,
+            chatId: context.chatId,
             shouldEngage: decision.should_engage_proactively,
             timing: decision.engagement_timing,
             hasContent: !!decision.proactive_message_content
@@ -85,7 +85,7 @@ class ProactiveDeliveryService extends AbstractService {
             // If no proactive engagement needed, skip
             if (!decision.should_engage_proactively || !decision.proactive_message_content) {
                 this.logger.info('No proactive engagement needed', 'ProactiveDelivery', {
-                    sessionId: context.sessionId,
+                    chatId: context.chatId,
                     reasoning: decision.psychological_reasoning
                 });
                 return null;
@@ -100,7 +100,7 @@ class ProactiveDeliveryService extends AbstractService {
             if (delaySeconds === 0) {
                 // Send immediately
                 return await this.deliverProactiveMessage({
-                    sessionId: context.sessionId,
+                    chatId: context.chatId,
                     userId: context.userId,
                     personalityId: context.personality.id,
                     personalityName: context.personality.name,
@@ -112,7 +112,7 @@ class ProactiveDeliveryService extends AbstractService {
             } else if (delaySeconds > 0) {
                 // Schedule for later delivery
                 return this.scheduleProactiveMessage({
-                    sessionId: context.sessionId,
+                    chatId: context.chatId,
                     userId: context.userId,
                     personalityId: context.personality.id,
                     personalityName: context.personality.name,
@@ -131,7 +131,7 @@ class ProactiveDeliveryService extends AbstractService {
                 'Failed to process proactive decision') || error;
             this.logger.error('Error processing proactive decision', 'ProactiveDelivery', {
                 error: wrappedError.message,
-                sessionId: context.sessionId
+                chatId: context.chatId
             });
             throw wrappedError;
         }
@@ -142,14 +142,14 @@ class ProactiveDeliveryService extends AbstractService {
      */
     async deliverProactiveMessage(messageData) {
         this.logger.info('Delivering proactive message immediately', 'ProactiveDelivery', {
-            sessionId: messageData.sessionId,
+            chatId: messageData.chatId,
             personalityName: messageData.personalityName
         });
 
         try {
             // Save proactive message to database
             const messageId = await this.dal.conversations.saveMessage(
-                messageData.sessionId,
+                messageData.chatId,
                 'assistant',
                 messageData.content,
                 'proactive',
@@ -165,7 +165,7 @@ class ProactiveDeliveryService extends AbstractService {
             // Create message object for frontend
             const frontendMessage = {
                 id: messageId,
-                sessionId: messageData.sessionId,
+                chatId: messageData.chatId,
                 content: messageData.content,
                 type: 'ai',
                 timestamp: new Date(),
@@ -178,13 +178,13 @@ class ProactiveDeliveryService extends AbstractService {
 
             // Emit message for real-time delivery (WebSocket/SSE)
             this.messageEmitter.emit('proactive-message', {
-                sessionId: messageData.sessionId,
+                chatId: messageData.chatId,
                 message: frontendMessage
             });
 
             this.logger.info('Proactive message delivered', 'ProactiveDelivery', {
                 messageId,
-                sessionId: messageData.sessionId
+                chatId: messageData.chatId
             });
 
             return {
@@ -198,7 +198,7 @@ class ProactiveDeliveryService extends AbstractService {
                 'Failed to deliver proactive message') || error;
             this.logger.error('Error delivering proactive message', 'ProactiveDelivery', {
                 error: wrappedError.message,
-                sessionId: messageData.sessionId
+                chatId: messageData.chatId
             });
             throw wrappedError;
         }
@@ -209,12 +209,12 @@ class ProactiveDeliveryService extends AbstractService {
      */
     scheduleProactiveMessage(messageData) {
         this.logger.info('Scheduling proactive message', 'ProactiveDelivery', {
-            sessionId: messageData.sessionId,
+            chatId: messageData.chatId,
             delaySeconds: messageData.delaySeconds,
             personalityName: messageData.personalityName
         });
 
-        const scheduleId = `${messageData.sessionId}-${Date.now()}`;
+        const scheduleId = `${messageData.chatId}-${Date.now()}`;
         
         const timer = setTimeout(async () => {
             try {
@@ -224,7 +224,7 @@ class ProactiveDeliveryService extends AbstractService {
                 this.logger.error('Error delivering scheduled proactive message', 'ProactiveDelivery', {
                     error: error.message,
                     scheduleId,
-                    sessionId: messageData.sessionId
+                    chatId: messageData.chatId
                 });
                 this.scheduledMessages.delete(scheduleId);
             }
@@ -239,7 +239,7 @@ class ProactiveDeliveryService extends AbstractService {
 
         this.logger.info('Proactive message scheduled', 'ProactiveDelivery', {
             scheduleId,
-            sessionId: messageData.sessionId,
+            chatId: messageData.chatId,
             willDeliverAt: new Date(Date.now() + (messageData.delaySeconds * 1000))
         });
 
@@ -255,25 +255,25 @@ class ProactiveDeliveryService extends AbstractService {
      * DOMAIN LAYER: Register session for real-time message delivery
      * Frontend connections can register to receive proactive messages
      */
-    registerSession(sessionId, deliveryCallback) {
+    registerSession(chatId, deliveryCallback) {
         this.logger.info('Registering session for proactive delivery', 'ProactiveDelivery', {
-            sessionId
+            chatId
         });
 
-        this.activeSessions.set(sessionId, {
+        this.activeSessions.set(chatId, {
             callback: deliveryCallback,
             registeredAt: new Date()
         });
 
         // Listen for proactive messages for this session
         const messageHandler = (data) => {
-            if (data.sessionId === sessionId) {
+            if (data.chatId === chatId) {
                 try {
                     deliveryCallback(data.message);
                 } catch (error) {
                     this.logger.error('Error in proactive message callback', 'ProactiveDelivery', {
                         error: error.message,
-                        sessionId
+                        chatId
                     });
                 }
             }
@@ -283,10 +283,10 @@ class ProactiveDeliveryService extends AbstractService {
 
         // Return cleanup function
         return () => {
-            this.activeSessions.delete(sessionId);
+            this.activeSessions.delete(chatId);
             this.messageEmitter.removeListener('proactive-message', messageHandler);
             this.logger.info('Unregistered session from proactive delivery', 'ProactiveDelivery', {
-                sessionId
+                chatId
             });
         };
     }
@@ -302,7 +302,7 @@ class ProactiveDeliveryService extends AbstractService {
             
             this.logger.info('Cancelled scheduled proactive message', 'ProactiveDelivery', {
                 scheduleId,
-                sessionId: scheduled.messageData.sessionId
+                chatId: scheduled.messageData.chatId
             });
             
             return true;
@@ -329,14 +329,14 @@ class ProactiveDeliveryService extends AbstractService {
     /**
      * DOMAIN LAYER: Get proactive message analytics
      */
-    async getDeliveryAnalytics(sessionId = null) {
+    async getDeliveryAnalytics(chatId = null) {
         try {
             const activeSessionCount = this.activeSessions.size;
             const scheduledMessageCount = this.scheduledMessages.size;
             
             const scheduledMessages = Array.from(this.scheduledMessages.entries()).map(([id, data]) => ({
                 scheduleId: id,
-                sessionId: data.messageData?.sessionId || 'unknown',
+                chatId: data.messageData?.chatId || 'unknown',
                 scheduledAt: data.scheduledAt,
                 content: (data.messageData?.content || '').substring(0, 50) + '...'
             }));
@@ -344,15 +344,15 @@ class ProactiveDeliveryService extends AbstractService {
             return {
                 activeSessionCount,
                 scheduledMessageCount,
-                scheduledMessages: sessionId 
-                    ? scheduledMessages.filter(msg => msg.sessionId === sessionId)
+                scheduledMessages: chatId 
+                    ? scheduledMessages.filter(msg => msg.chatId === chatId)
                     : scheduledMessages
             };
 
         } catch (error) {
             this.logger.error('Error getting delivery analytics', 'ProactiveDelivery', {
                 error: error.message,
-                sessionId
+                chatId
             });
             return { activeSessionCount: 0, scheduledMessageCount: 0, scheduledMessages: [] };
         }

@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { CollapsiblePsychologySection } from './CollapsiblePsychologySection';
 import CommitmentPanel from './CommitmentPanel';
 import EventsPanel from './EventsPanel';
 import { useChatContext } from '../../contexts/ChatContext';
@@ -9,6 +8,8 @@ import type { Message } from '../../types';
 import { formatChatTimestamp } from '../../utils/dateFormatter';
 import ReactMarkdown from 'react-markdown';
 import { API_BASE_URL } from '../../config/api';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { getCharacterImageUrl } from '../../utils/characterImageCache';
 
 const ChatPage: React.FC = () => {
   const { user } = useAuth();
@@ -26,8 +27,48 @@ const ChatPage: React.FC = () => {
 
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isTasksPanelExpanded, setIsTasksPanelExpanded] = useState(true);
+  const [characterImageUrl, setCharacterImageUrl] = useState<string>('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Remember tasks panel collapsed state in localStorage
+  const tasksPanelStorageKey = 'aria-tasks-panel-expanded';
+
+  useEffect(() => {
+    const savedState = localStorage.getItem(tasksPanelStorageKey);
+    if (savedState !== null) {
+      setIsTasksPanelExpanded(JSON.parse(savedState));
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(tasksPanelStorageKey, JSON.stringify(isTasksPanelExpanded));
+  }, [isTasksPanelExpanded]);
+
+  // Load character image when chat changes
+  useEffect(() => {
+    if (!user || !currentChat) {
+      setCharacterImageUrl('');
+      return;
+    }
+
+    const loadImage = async () => {
+      try {
+        const imageUrl = await getCharacterImageUrl(
+          currentChat.characterAvatar,
+          currentChat.characterId,
+          user.id
+        );
+        setCharacterImageUrl(imageUrl);
+      } catch (error) {
+        console.error('Failed to load character image:', error);
+        setCharacterImageUrl('');
+      }
+    };
+
+    loadImage();
+  }, [currentChat, user]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -163,7 +204,7 @@ const ChatPage: React.FC = () => {
         },
         body: JSON.stringify({
           message: messageContent,
-          sessionId: currentChat.id,
+          chatId: currentChat.id,  // FIXED: Changed from sessionId to chatId
           userId: user.id,
           characterId: currentChat.characterId
         })
@@ -273,19 +314,25 @@ const ChatPage: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-screen md:h-auto">
+    <div className="flex-1 flex flex-col md:h-full">
       {/* Header */}
       <div className="bg-white border-b p-3 md:p-4 flex items-center justify-between flex-shrink-0">
         {currentChat ? (
           <div className="flex items-center space-x-2 md:space-x-3">
-            <img 
-              src={`/avatars/${currentChat.characterAvatar}`}
-              alt={currentChat.characterName}
-              className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentChat.characterName)}&background=random`;
-              }}
-            />
+            {characterImageUrl ? (
+              <img 
+                src={characterImageUrl}
+                alt={currentChat.characterName}
+                className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentChat.characterName)}&background=random`;
+                }}
+              />
+            ) : (
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-sm">
+                {currentChat.characterName.charAt(0).toUpperCase()}
+              </div>
+            )}
             <div>
               <h2 className="font-semibold text-gray-800 text-sm md:text-base">{currentChat.characterName}</h2>
               <p className="text-xs md:text-sm text-gray-500">AI Character</p>
@@ -322,44 +369,54 @@ const ChatPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Psychology Section - Collapsible (Desktop only) */}
-      {currentChat && (
-        <CollapsiblePsychologySection
-          characterName={currentChat.characterName}
-          sessionId={currentChat.id}
-          className="m-4 hidden md:block"
-        />
-      )}
-
-      {/* Tasks and Events Panel */}
+      {/* Tasks and Events Panel - Collapsible */}
       {currentChat && (
         <div className="mx-2 my-2 md:m-4">
-          <div className="flex flex-col md:flex-row gap-2 md:gap-4">
-            <div className="flex-1">
-              <h3 className="font-semibold mb-2 text-sm md:text-base">Tasks</h3>
-              <CommitmentPanel 
-                chatId={currentChat.id} 
-                userId={user?.id || ''}
-                onVerificationFeedback={handleVerificationFeedback}
-              />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold mb-2 text-sm md:text-base">Events</h3>
-              <EventsPanel 
-                chatId={currentChat.id} 
-                userId={user?.id || ''}
-              />
-            </div>
+          <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-xl border border-green-100">
+            {/* Header */}
+            <button
+              type="button"
+              onClick={() => setIsTasksPanelExpanded(!isTasksPanelExpanded)}
+              className="w-full p-3 md:p-4 flex items-center justify-between hover:bg-green-50/50 active:bg-green-100 transition-colors rounded-xl cursor-pointer touch-manipulation"
+            >
+              <h3 className="font-semibold text-gray-800 flex items-center text-sm md:text-base">
+                📋 Tasks & Events
+              </h3>
+              {isTasksPanelExpanded ? (
+                <ChevronUp className="w-4 h-4 md:w-5 md:h-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-4 h-4 md:w-5 md:h-5 text-gray-500" />
+              )}
+            </button>
+
+            {/* Content */}
+            {isTasksPanelExpanded && (
+              <div className="px-2 pb-2 md:px-4 md:pb-4">
+                <div className="flex flex-col md:flex-row gap-2 md:gap-4">
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-2 text-sm md:text-base text-gray-700">Tasks</h4>
+                    <CommitmentPanel 
+                      chatId={currentChat.id} 
+                      userId={user?.id || ''}
+                      onVerificationFeedback={handleVerificationFeedback}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-2 text-sm md:text-base text-gray-700">Events</h4>
+                    <EventsPanel 
+                      chatId={currentChat.id} 
+                      userId={user?.id || ''}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Messages - Scrollable Area with Fixed Height */}
-      <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 md:space-y-6"
-           style={{ 
-             maxHeight: 'calc(100vh - 400px)',
-             minHeight: '200px'
-           }}>
+      {/* Messages - Scrollable Area - Fills Available Space */}
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 md:space-y-6 min-h-[300px]">
         {currentChat ? (
           <>
             {currentChat.messages.map((message) => {
@@ -411,8 +468,21 @@ const ChatPage: React.FC = () => {
                 return (
                   <div key={message.id} className="flex items-start space-x-3">
                     {/* Avatar */}
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white flex items-center justify-center flex-shrink-0">
-                      🤖
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      {characterImageUrl ? (
+                        <img 
+                          src={characterImageUrl}
+                          alt={currentChat.characterName}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentChat.characterName)}&background=random`;
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-white font-bold">
+                          {currentChat?.characterName.charAt(0).toUpperCase() || '🤖'}
+                        </div>
+                      )}
                     </div>
                     
                     {/* Verification Message Bubble */}
@@ -477,12 +547,27 @@ const ChatPage: React.FC = () => {
                   message.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''
                 }`}>
                   {/* Avatar */}
-                  <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center flex-shrink-0 text-sm md:text-base ${
+                  <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center flex-shrink-0 text-sm md:text-base overflow-hidden ${
                     message.type === 'user' 
                       ? 'bg-blue-500 text-white' 
                       : 'bg-gradient-to-br from-purple-500 to-pink-500 text-white'
                   }`}>
-                    {message.type === 'user' ? '👤' : '🤖'}
+                    {message.type === 'user' ? (
+                      '👤'
+                    ) : characterImageUrl ? (
+                      <img 
+                        src={characterImageUrl}
+                        alt={currentChat.characterName}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentChat.characterName)}&background=random`;
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-white font-bold text-xs md:text-sm">
+                        {currentChat?.characterName.charAt(0).toUpperCase() || '🤖'}
+                      </div>
+                    )}
                   </div>
                   
                   {/* Message Bubble */}

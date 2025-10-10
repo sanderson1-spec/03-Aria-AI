@@ -104,7 +104,7 @@ class AuthService extends AbstractService {
             this.logger.info('User logged in successfully', 'AuthService', {
                 userId: user.id,
                 username: user.username,
-                sessionId: session.sessionId
+                chatId: session.chatId
             });
 
             return {
@@ -183,7 +183,7 @@ class AuthService extends AbstractService {
                     displayName: session.display_name,
                     email: session.email
                 },
-                sessionId: session.session_id
+                chatId: session.session_id
             };
         } catch (error) {
             this.logger.warn('Session validation failed', 'AuthService', { error: error.message });

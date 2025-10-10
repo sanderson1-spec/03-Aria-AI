@@ -48,8 +48,8 @@ class ContextBuilderService extends AbstractService {
                 recentCompletions
             ] = await Promise.all([
                 this.getRecentMessages(chatId, windowSize),
-                this.psychology.getState(userId, chatId, characterId),
-                this.dal.memories.getTopWeightedMemories(userId, chatId, 10),
+                this.psychology.getPsychologicalState(chatId),  // ✅ Fixed: correct method name, chatId is session_id
+                this.dal.psychology.getWeightedMemories(chatId, 10).catch(err => { this.logger.warn('Failed to get weighted memories:', err.message); return []; }),
                 this.dal.commitments.getActiveCommitments(userId),
                 this.dal.events.getUpcomingEvents(userId, 5),
                 this.getRecentCompletions(userId)
@@ -96,7 +96,7 @@ class ContextBuilderService extends AbstractService {
                 windowSize 
             });
 
-            const messages = await this.dal.conversationLogs.getRecentMessages(chatId, windowSize);
+            const messages = await this.dal.conversations.getRecentMessages(chatId, windowSize);
 
             return messages;
         } catch (error) {

@@ -167,7 +167,12 @@ class SchedulingService extends AbstractService {
             });
 
             // Trigger message delivery via message delivery service
-            await this.messageDelivery.deliverMessage(engagement);
+            await this.messageDelivery.deliverMessageToUser(engagement.user_id, {
+                type: 'proactive',
+                content: engagement.engagement_content,
+                metadata: engagement.engagement_metadata,
+                engagementId: engagement.id
+            });
 
             // Update engagement status to delivered
             await this.updateEngagementStatus(engagement.id, 'delivered');

@@ -72,7 +72,7 @@ Rate the relevance (1-10) of each previous message for responding naturally to t
 CURRENT MESSAGE: "${currentMessage}"
 
 PREVIOUS MESSAGES TO SCORE:
-${recentMessages.map((msg, i) => `${i}: [${msg.sender}] "${msg.message}"`).join('\n')}
+${recentMessages.map((msg, i) => `${i}: [${msg.role}] "${msg.content}"`).join('\n')}
 
 Consider:
 - Is the topic still active or was it naturally concluded?
@@ -278,7 +278,7 @@ Focus on natural conversation flow. Only mark topics as concluded when they're t
      */
     buildAnalysisPrompt(message, previousMessages, sessionContext) {
         const contextStr = previousMessages.slice(-this.config.contextWindow)
-            .map((msg, i) => `${msg.sender}: "${msg.message}"`)
+            .map((msg, i) => `${msg.role}: "${msg.content}"`)
             .join('\n');
         
         const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
@@ -292,7 +292,7 @@ PREVIOUS CONTEXT:
 ${contextStr}
 
 CURRENT MESSAGE: 
-${message.sender}: "${message.message}"
+${message.role}: "${message.content}"
 
 Analyze and respond with JSON:
 {
@@ -337,7 +337,7 @@ Focus on natural conversation flow and semantic understanding. Consider time-bas
      * Fallback analysis when LLM fails
      */
     getFallbackAnalysis(message) {
-        const text = message.message.toLowerCase();
+        const text = message.content.toLowerCase();
         
         return {
             topicConclusion: false,
@@ -369,11 +369,11 @@ Focus on natural conversation flow and semantic understanding. Consider time-bas
 
     fallbackMessageAnalysis(message, nextMessage) {
         return {
-            topicConclusion: super.isTopicConclusion(message.message, nextMessage?.message),
-            acknowledgment: super.isAcknowledgment(message.message),
+            topicConclusion: super.isTopicConclusion(message.content, nextMessage?.content),
+            acknowledgment: super.isAcknowledgment(message.content),
             newTopic: false,
             relevanceScore: 5,
-            messageType: super.isQuestion(message.message) ? 'question' : 'statement',
+            messageType: super.isQuestion(message.content) ? 'question' : 'statement',
             conversationFlow: 'continuing',
             semanticWeight: 1.0,
             reasoning: 'Fallback rule-based analysis'

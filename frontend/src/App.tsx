@@ -23,9 +23,9 @@ const AppContent: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
+    <div className="min-h-screen md:h-screen bg-gray-100 md:flex md:overflow-hidden relative">
       {/* Mobile Header with Hamburger Menu */}
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-white border-b z-40 px-4 py-3 flex items-center justify-between">
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-white border-b z-[100] px-4 py-3 flex items-center justify-between shadow-sm">
         <button
           onClick={() => setIsMobileMenuOpen(true)}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -50,16 +50,16 @@ const AppContent: React.FC = () => {
         onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
       />
 
-      {/* Mobile Menu Overlay */}
+      {/* Mobile Menu Overlay - after sidebar in DOM so it appears between sidebar and content */}
       {isMobileMenuOpen && (
         <div
-          className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-[60]"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col md:pt-0 pt-[57px]">
+      <div className="w-full md:flex-1 flex flex-col md:pt-0 pt-[57px] md:overflow-hidden relative z-10">
         <Routes>
           <Route path="/" element={
             <ProtectedRoute>

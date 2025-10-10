@@ -44,57 +44,30 @@ class ConversationRepository extends BaseRepository {
     }
 
     /**
-     * DOMAIN LAYER: Save a message (MULTI-USER SUPPORT)
-     * Core message storage with user isolation
-     */
-    async saveMessage(userId, chatId, messageData) {
-        try {
-            const messageId = require('uuid').v4();
-            const now = new Date().toISOString();
-            
-            const message = {
-                id: messageId,
-                user_id: userId,  // MULTI-USER SUPPORT
-                chat_id: chatId,
-                sender: messageData.sender,
-                message: messageData.message,
-                timestamp: now,
-                analysis_data: JSON.stringify(messageData.analysis_data || {}),
-                created_at: now
-            };
-
-            await this.create(message);
-            return await this.findById(messageId);
-        } catch (error) {
-            throw this.errorHandler.wrapRepositoryError(error, 'Failed to save message', { userId, chatId, messageData });
-        }
-    }
-
-    /**
      * DOMAIN LAYER: Get conversation history (alias for compatibility)
      * Retrieves messages with proper ordering and limits
      */
-    async getHistory(sessionId, limit = 50, offset = 0) {
-        return await this.getSessionHistory(sessionId, limit, offset);
+    async getHistory(chatId, limit = 50, offset = 0) {
+        return await this.getSessionHistory(chatId, limit, offset);
     }
 
     /**
      * DOMAIN LAYER: Get conversation history (alias for API compatibility)
      * Retrieves messages with proper ordering and limits
      */
-    async getConversationHistory(sessionId, limit = 50, offset = 0) {
-        return await this.getSessionHistory(sessionId, limit, offset);
+    async getConversationHistory(chatId, limit = 50, offset = 0) {
+        return await this.getSessionHistory(chatId, limit, offset);
     }
 
     /**
      * DOMAIN LAYER: Search history (alias for compatibility)
      * Flexible search across message content and metadata
      */
-    async searchHistory(sessionId, keywords = [], daysBack = 30, limit = 50) {
+    async searchHistory(chatId, keywords = [], daysBack = 30, limit = 50) {
         const fromDate = new Date();
         fromDate.setDate(fromDate.getDate() - daysBack);
         
-        return await this.searchConversationHistory(sessionId, {
+        return await this.searchConversationHistory(chatId, {
             keywords,
             fromDate: fromDate.toISOString(),
             limit
@@ -105,42 +78,46 @@ class ConversationRepository extends BaseRepository {
      * DOMAIN LAYER: Save memory weights (alias for compatibility)
      * Stores psychological significance weights for messages
      */
-    async saveMemoryWeights(sessionId, messageId, weightData) {
-        return await this.saveMemoryWeight(sessionId, messageId, weightData);
+    async saveMemoryWeights(chatId, messageId, weightData) {
+        return await this.saveMemoryWeight(chatId, messageId, weightData);
     }
 
     /**
      * DOMAIN LAYER: Get weighted context (alias for compatibility)
      * Retrieves messages with memory significance weighting
      */
-    async getWeightedContext(sessionId, maxMessages = 10) {
-        return await this.getWeightedMemories(sessionId, maxMessages);
+    async getWeightedContext(chatId, maxMessages = 10) {
+        return await this.getWeightedMemories(chatId, maxMessages);
     }
 
     /**
      * DOMAIN LAYER: Save a new message with analysis data
      * Core message storage with comprehensive metadata
      */
-    async saveMessage(sessionId, sender, message, agentType = 'chat', analysisData = {}) {
+    async saveMessage(chatId, sender, message, agentType = 'chat', analysisData = {}) {
         this.validateRequiredFields(
-            { sessionId, sender, message }, 
-            ['sessionId', 'sender', 'message'], 
+            { chatId, sender, message }, 
+            ['chatId', 'sender', 'message'], 
             'save message'
         );
+        
+        // Generate UUID for message ID
+        const messageId = require('uuid').v4();
 
         // Get user_id from chat
-        const chat = await this.dal.queryOne('SELECT user_id FROM chats WHERE id = ?', [sessionId]);
+        const chat = await this.dal.queryOne('SELECT user_id FROM chats WHERE id = ?', [chatId]);
         
         if (!chat) {
             throw this.errorHandler.wrapRepositoryError(
                 new Error('Chat not found'),
                 'Cannot save message for non-existent chat',
-                { sessionId }
+                { chatId }
             );
         }
         
         const messageData = this.sanitizeData({
-            chat_id: sessionId,  // Use chat_id instead of session_id
+            id: messageId,       // ✅ CRITICAL: Include the UUID
+            chat_id: chatId,  // Use chat_id instead of session_id
             role: sender,        // Use role instead of sender  
             content: message,    // Use content instead of message
             user_id: chat.user_id,  // Get from chat record
@@ -148,11 +125,14 @@ class ConversationRepository extends BaseRepository {
             timestamp: this.getCurrentTimestamp()
         });
 
-        const result = await super.create(messageData, 'conversation_logs');
+        // CRITICAL FIX: Call DAL directly with correct table name
+        // super.create() ignores the second parameter and uses this.tableName
+        const result = await this.dal.create('conversation_logs', messageData);
         
         return {
+            id: messageId,  // ✅ Return the actual UUID, not lastID
             ...result,
-            messageData: { ...messageData, id: result.id }
+            messageData: { ...messageData, id: messageId }
         };
     }
 
@@ -160,8 +140,8 @@ class ConversationRepository extends BaseRepository {
      * DOMAIN LAYER: Get conversation history for a session
      * Retrieves messages with proper ordering and limits
      */
-    async getSessionHistory(sessionId, limit = 50, offset = 0) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'get session history');
+    async getSessionHistory(chatId, limit = 50, offset = 0) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'get session history');
         
         // Use DAL query method directly
         const query = `
@@ -171,93 +151,88 @@ class ConversationRepository extends BaseRepository {
             LIMIT ? OFFSET ?
         `;
         
-        const records = await this.dal.query(query, [sessionId, limit, offset]);
+        const records = await this.dal.query(query, [chatId, limit, offset]);
         
         return records.reverse(); // Return in chronological order
     }
 
     /**
-     * DOMAIN LAYER: Get current conversation state
-     * Calculates real-time conversation metrics and state
+     * DOMAIN LAYER: Get conversation state for context awareness
+     * Calculates conversation metrics and state from message history
      */
-    async getConversationState(sessionId) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'get conversation state');
+    async getConversationState(chatId) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'get conversation state');
         
-        try {
-            // Helper function to detect greeting in message
-            const isGreeting = (message) => /^(good morning|good evening|good afternoon|hello|hi there|hey|greetings)/i.test(message.trim());
-            
-            // Fetch recent messages
-            const messages = await this.getSessionHistory(sessionId, 100);
-            
-            // Handle empty messages array
-            if (!messages || messages.length === 0) {
-                this.logger.debug('No messages found for conversation state', { sessionId });
-                return {
-                    messages_exchanged: 0,
-                    conversation_started_at: null,
-                    conversation_duration_minutes: 0,
-                    last_message: null,
-                    last_message_sender: null,
-                    last_message_timestamp: null,
-                    last_message_was_question: false,
-                    time_since_last_message_seconds: 0,
-                    user_response_pending: false,
-                    greeting_sent_this_session: false
-                };
-            }
-            
-            // Get first and last messages
-            const firstMessage = messages[0];
-            const lastMessage = messages[messages.length - 1];
-            
-            // Calculate conversation duration
-            const now = new Date();
-            const conversationStartTime = new Date(firstMessage.timestamp);
-            const conversationDurationMinutes = Math.floor((now - conversationStartTime) / (1000 * 60));
-            
-            // Calculate time since last message
-            const lastMessageTime = new Date(lastMessage.timestamp);
-            const timeSinceLastMessageSeconds = Math.floor((now - lastMessageTime) / 1000);
-            
-            // Check if last message was a question
-            const lastMessageWasQuestion = lastMessage.message ? lastMessage.message.includes('?') : false;
-            
-            // Check if user response is pending
-            const userResponsePending = lastMessage.sender === 'assistant' && lastMessageWasQuestion;
-            
-            // Check if greeting was sent this session
-            const greetingSentThisSession = messages.some(m => 
-                m.sender === 'assistant' && m.message && isGreeting(m.message)
-            );
-            
-            const state = {
-                messages_exchanged: messages.length,
-                conversation_started_at: firstMessage.timestamp,
-                conversation_duration_minutes: conversationDurationMinutes,
-                last_message: lastMessage,
-                last_message_sender: lastMessage.sender,
-                last_message_timestamp: lastMessage.timestamp,
-                last_message_was_question: lastMessageWasQuestion,
-                time_since_last_message_seconds: timeSinceLastMessageSeconds,
-                user_response_pending: userResponsePending,
-                greeting_sent_this_session: greetingSentThisSession
+        // Get recent messages (use chat_id column, not session_id!)
+        const messages = await this.getSessionHistory(chatId, 100);
+        
+        if (!messages || messages.length === 0) {
+            return {
+                messages_exchanged: 0,
+                conversation_started_at: null,
+                conversation_duration_minutes: 0,
+                last_message: null,
+                last_message_sender: null,
+                last_message_timestamp: null,
+                last_message_was_question: false,
+                time_since_last_message_seconds: 0,
+                user_response_pending: false,
+                greeting_sent_this_session: false
             };
-            
-            this.logger.debug('Conversation state calculated', { sessionId, state });
-            
-            return state;
-        } catch (error) {
-            throw this.errorHandler.wrapRepositoryError(error, 'Failed to get conversation state', { sessionId });
         }
+        
+        const firstMessage = messages[0];
+        const lastMessage = messages[messages.length - 1];
+        const now = Date.now();
+        const conversationStartTime = new Date(firstMessage.timestamp).getTime();
+        const lastMessageTime = new Date(lastMessage.timestamp).getTime();
+        
+        // Helper function to detect greetings
+        const isGreeting = (message) => {
+            if (!message) return false;
+            const lowerMessage = message.toLowerCase().trim();
+            return /^(good morning|good evening|good afternoon|hello|hi there|hey|greetings|howdy)/.test(lowerMessage);
+        };
+        
+        // Check if any assistant message contains a greeting
+        const greetingSent = messages.some(m => 
+            (m.sender === 'assistant' || m.role === 'assistant') && 
+            isGreeting(m.message || m.content)
+        );
+        
+        // Check if last message was a question
+        const lastMessageContent = lastMessage.message || lastMessage.content || '';
+        const lastMessageWasQuestion = lastMessageContent.includes('?');
+        
+        // Check if user response is pending (last message from assistant and it was a question)
+        const userResponsePending = 
+            (lastMessage.sender === 'assistant' || lastMessage.role === 'assistant') && 
+            lastMessageWasQuestion;
+        
+        return {
+            messages_exchanged: messages.length,
+            conversation_started_at: firstMessage.timestamp,
+            conversation_duration_minutes: Math.floor((now - conversationStartTime) / 60000),
+            last_message: {
+                message: lastMessageContent,
+                sender: lastMessage.sender || lastMessage.role,
+                timestamp: lastMessage.timestamp
+            },
+            last_message_sender: lastMessage.sender || lastMessage.role,
+            last_message_timestamp: lastMessage.timestamp,
+            last_message_was_question: lastMessageWasQuestion,
+            time_since_last_message_seconds: Math.floor((now - lastMessageTime) / 1000),
+            user_response_pending: userResponsePending,
+            greeting_sent_this_session: greetingSent
+        };
     }
 
     /**
      * DOMAIN LAYER: Get recent messages for context building
      * Optimized for conversation context retrieval
      */
-    async getRecentMessages(sessionId, count = 10, beforeTimestamp = null) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'get recent messages');
+    async getRecentMessages(chatId, count = 10, beforeTimestamp = null) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'get recent messages');
         
         // Query parameters will be built dynamically
         
@@ -265,7 +240,7 @@ class ConversationRepository extends BaseRepository {
             SELECT * FROM ${this.tableName} 
             WHERE chat_id = ?
         `;
-        const params = [sessionId];
+        const params = [chatId];
         
         if (beforeTimestamp) {
             query += ` AND timestamp < ?`;
@@ -281,14 +256,33 @@ class ConversationRepository extends BaseRepository {
     }
 
     /**
+     * DOMAIN LAYER: Get messages by IDs
+     * Retrieves multiple messages by their IDs
+     */
+    async getMessagesByIds(messageIds) {
+        if (!messageIds || messageIds.length === 0) {
+            return [];
+        }
+        
+        const placeholders = messageIds.map(() => '?').join(',');
+        const query = `
+            SELECT * FROM ${this.tableName}
+            WHERE id IN (${placeholders})
+            ORDER BY timestamp ASC
+        `;
+        
+        return await this.dal.query(query, messageIds);
+    }
+
+    /**
      * DOMAIN LAYER: Get messages by topic
      * Retrieves all messages related to a specific topic
      */
-    async getMessagesByTopic(sessionId, topicId) {
-        this.validateRequiredFields({ sessionId, topicId }, ['sessionId', 'topicId'], 'get messages by topic');
+    async getMessagesByTopic(chatId, topicId) {
+        this.validateRequiredFields({ chatId, topicId }, ['chatId', 'topicId'], 'get messages by topic');
         
         return await super.findAll({
-            chat_id: sessionId, // Fixed: use chat_id instead of session_id
+            chat_id: chatId, // Fixed: use chat_id instead of session_id
             topic_id: topicId
         });
     }
@@ -297,10 +291,10 @@ class ConversationRepository extends BaseRepository {
      * DOMAIN LAYER: Search conversation history
      * Flexible search across message content and metadata
      */
-    async searchConversationHistory(sessionId, criteria = {}) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'search conversation');
+    async searchConversationHistory(chatId, criteria = {}) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'search conversation');
         
-        const conditions = { chat_id: sessionId };
+        const conditions = { chat_id: chatId };
         
         if (criteria.keywords && criteria.keywords.length > 0) {
             // Note: This is a limitation of the current domain method approach
@@ -325,7 +319,7 @@ class ConversationRepository extends BaseRepository {
             SELECT * FROM ${this.tableName} 
             WHERE chat_id = ?
         `;
-        const params = [criteria.sessionId];
+        const params = [criteria.chatId];
         
         if (criteria.toDate) {
             query += ` AND timestamp <= ?`;
@@ -363,8 +357,8 @@ class ConversationRepository extends BaseRepository {
      * DOMAIN LAYER: Get conversation summary statistics
      * Provides insights into conversation patterns
      */
-    async getConversationSummary(sessionId, daysBack = 7) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'get conversation summary');
+    async getConversationSummary(chatId, daysBack = 7) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'get conversation summary');
         
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - daysBack);
@@ -385,7 +379,7 @@ class ConversationRepository extends BaseRepository {
             WHERE chat_id = ? AND timestamp >= ?
         `;
         
-        return await super.queryOne(sql, [sessionId, cutoffDate.toISOString()]);
+        return await super.queryOne(sql, [chatId, cutoffDate.toISOString()]);
     }
 
     // ========================================================================
@@ -396,16 +390,28 @@ class ConversationRepository extends BaseRepository {
      * DOMAIN LAYER: Save memory weights for a message
      * Stores psychological significance scoring for memory recall
      */
-    async saveMemoryWeight(sessionId, messageId, weightData) {
+    async saveMemoryWeight(chatId, messageId, weightData) {
         this.validateRequiredFields(
-            { sessionId, messageId, weightData }, 
-            ['sessionId', 'messageId', 'weightData'], 
+            { chatId, messageId, weightData }, 
+            ['chatId', 'messageId', 'weightData'], 
             'save memory weight'
         );
 
+        // FIX: Get user_id from chat
+        const chat = await this.dal.queryOne('SELECT user_id FROM chats WHERE id = ?', [chatId]);
+        
+        if (!chat) {
+            throw this.errorHandler.wrapRepositoryError(
+                new Error('Chat not found'),
+                'Cannot save memory weight for non-existent chat',
+                { chatId }
+            );
+        }
+
         const memoryWeight = this.sanitizeData({
             id: this.generateId(),
-            session_id: sessionId,
+            session_id: chatId,
+            user_id: chat.user_id,  // FIX: Add user_id
             message_id: messageId,
             emotional_impact_score: weightData.emotional_impact_score || 5,
             relationship_relevance: weightData.relationship_relevance || 5,
@@ -418,15 +424,17 @@ class ConversationRepository extends BaseRepository {
             updated_at: this.getCurrentTimestamp()
         });
 
-        return await super.create(memoryWeight);
+        // CRITICAL FIX: Call DAL directly with correct table name
+        // super.create() ignores the second parameter and uses this.tableName
+        return await this.dal.create('character_memory_weights', memoryWeight);
     }
 
     /**
      * DOMAIN LAYER: Get weighted memories for context building
      * Retrieves messages ordered by psychological significance
      */
-    async getWeightedMemories(sessionId, maxMessages = 10, minTotalWeight = 0) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'get weighted memories');
+    async getWeightedMemories(chatId, maxMessages = 10, minTotalWeight = 0) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'get weighted memories');
         
         const sql = `
             SELECT 
@@ -453,7 +461,7 @@ class ConversationRepository extends BaseRepository {
             LIMIT ?
         `;
         
-        const params = [sessionId];
+        const params = [chatId];
         if (minTotalWeight > 0) {
             params.push(minTotalWeight);
         }
@@ -466,8 +474,8 @@ class ConversationRepository extends BaseRepository {
      * DOMAIN LAYER: Increment memory recall frequency
      * Tracks how often memories are accessed for significance tracking
      */
-    async incrementMemoryRecall(sessionId, messageId) {
-        this.validateRequiredFields({ sessionId, messageId }, ['sessionId', 'messageId'], 'increment recall');
+    async incrementMemoryRecall(chatId, messageId) {
+        this.validateRequiredFields({ chatId, messageId }, ['chatId', 'messageId'], 'increment recall');
         
         const sql = `
             UPDATE ${this.memoryWeightsTable} 
@@ -478,15 +486,15 @@ class ConversationRepository extends BaseRepository {
         `;
         
         const timestamp = this.getCurrentTimestamp();
-        return await super.query(sql, [timestamp, timestamp, sessionId, messageId]);
+        return await super.query(sql, [timestamp, timestamp, chatId, messageId]);
     }
 
     /**
      * DOMAIN LAYER: Update memory weights
      * Adjusts psychological significance scores based on new insights
      */
-    async updateMemoryWeights(sessionId, messageId, updates) {
-        this.validateRequiredFields({ sessionId, messageId }, ['sessionId', 'messageId'], 'update memory weights');
+    async updateMemoryWeights(chatId, messageId, updates) {
+        this.validateRequiredFields({ chatId, messageId }, ['chatId', 'messageId'], 'update memory weights');
         
         const updateData = this.sanitizeData({
             ...updates,
@@ -497,7 +505,7 @@ class ConversationRepository extends BaseRepository {
             this.memoryWeightsTable, 
             updateData, 
             'session_id = ? AND message_id = ?', 
-            [sessionId, messageId]
+            [chatId, messageId]
         );
     }
 
@@ -505,8 +513,8 @@ class ConversationRepository extends BaseRepository {
      * DOMAIN LAYER: Get memory weight statistics
      * Provides insights into memory significance patterns
      */
-    async getMemoryWeightStatistics(sessionId) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'get memory statistics');
+    async getMemoryWeightStatistics(chatId) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'get memory statistics');
         
         const sql = `
             SELECT 
@@ -524,15 +532,15 @@ class ConversationRepository extends BaseRepository {
             WHERE session_id = ?
         `;
         
-        return await super.queryOne(sql, [sessionId]);
+        return await super.queryOne(sql, [chatId]);
     }
 
     /**
      * DOMAIN LAYER: Get top recalled memories
      * Identifies most frequently accessed memories
      */
-    async getTopRecalledMemories(sessionId, limit = 10) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'get top recalled memories');
+    async getTopRecalledMemories(chatId, limit = 10) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'get top recalled memories');
         
         const sql = `
             SELECT 
@@ -548,7 +556,7 @@ class ConversationRepository extends BaseRepository {
             LIMIT ?
         `;
         
-        return await super.query(sql, [sessionId, limit]);
+        return await super.query(sql, [chatId, limit]);
     }
 
     // ========================================================================
@@ -559,8 +567,8 @@ class ConversationRepository extends BaseRepository {
      * ANALYTICS LAYER: Get conversation analytics
      * Comprehensive conversation analysis and metrics
      */
-    async getConversationAnalytics(sessionId, daysBack = 30) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'get conversation analytics');
+    async getConversationAnalytics(chatId, daysBack = 30) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'get conversation analytics');
         
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - daysBack);
@@ -580,15 +588,15 @@ class ConversationRepository extends BaseRepository {
             ORDER BY conversation_date DESC
         `;
         
-        return await super.query(sql, [sessionId, cutoffDate.toISOString()]);
+        return await super.query(sql, [chatId, cutoffDate.toISOString()]);
     }
 
     /**
      * ANALYTICS LAYER: Get topic distribution
      * Shows how topics are distributed across conversations
      */
-    async getTopicDistribution(sessionId, limit = 20) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'get topic distribution');
+    async getTopicDistribution(chatId, limit = 20) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'get topic distribution');
         
         const sql = `
             SELECT 
@@ -605,15 +613,15 @@ class ConversationRepository extends BaseRepository {
             LIMIT ?
         `;
         
-        return await super.query(sql, [sessionId, limit]);
+        return await super.query(sql, [chatId, limit]);
     }
 
     /**
      * ANALYTICS LAYER: Get memory significance analysis
      * Comprehensive analysis of memory weights and significance patterns
      */
-    async getMemorySignificanceAnalysis(sessionId, options = {}) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'get memory significance analysis');
+    async getMemorySignificanceAnalysis(chatId, options = {}) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'get memory significance analysis');
         
         const { limit = 50, minSignificance = 20 } = options;
         
@@ -622,9 +630,9 @@ class ConversationRepository extends BaseRepository {
             const significantMemoriesSql = `
                 SELECT 
                     cmw.*,
-                    cl.message,
+                    cl.content as message,
                     cl.timestamp,
-                    cl.sender,
+                    cl.role as sender,
                     (cmw.emotional_impact_score + cmw.relationship_relevance + 
                      cmw.personal_significance + cmw.contextual_importance) as total_significance
                 FROM ${this.memoryWeightsTable} cmw
@@ -636,7 +644,7 @@ class ConversationRepository extends BaseRepository {
                 LIMIT ?
             `;
             
-            const significantMemories = await super.query(significantMemoriesSql, [sessionId, minSignificance, limit]);
+            const significantMemories = await super.query(significantMemoriesSql, [chatId, minSignificance, limit]);
             
             // Get memory distribution statistics
             const distributionSql = `
@@ -653,7 +661,7 @@ class ConversationRepository extends BaseRepository {
                 WHERE session_id = ?
             `;
             
-            const distribution = await super.queryOne(distributionSql, [sessionId]);
+            const distribution = await super.queryOne(distributionSql, [chatId]);
             
             // Get memory type breakdown
             const typeBreakdownSql = `
@@ -668,10 +676,10 @@ class ConversationRepository extends BaseRepository {
                 ORDER BY avg_significance DESC
             `;
             
-            const typeBreakdown = await super.query(typeBreakdownSql, [sessionId]);
+            const typeBreakdown = await super.query(typeBreakdownSql, [chatId]);
             
             return {
-                sessionId,
+                chatId,
                 significantMemories,
                 memoryDistribution: {
                     totalMemories: distribution?.total_memories || 0,
@@ -686,7 +694,7 @@ class ConversationRepository extends BaseRepository {
             
         } catch (error) {
             return {
-                sessionId,
+                chatId,
                 error: error.message,
                 significantMemories: [],
                 memoryDistribution: {},
@@ -926,17 +934,17 @@ class ConversationRepository extends BaseRepository {
      * INFRASTRUCTURE LAYER: Clean up session data
      * Removes all conversation data for a specific session
      */
-    async cleanupSessionData(sessionId) {
-        this.validateRequiredFields({ sessionId }, ['sessionId'], 'cleanup session');
+    async cleanupSessionData(chatId) {
+        this.validateRequiredFields({ chatId }, ['chatId'], 'cleanup session');
         
         return await super.executeInTransaction(async () => {
-            const weightResult = await super.delete(this.memoryWeightsTable, 'session_id = ?', [sessionId]);
-            const messageResult = await super.delete(this.conversationTable, 'chat_id = ?', [sessionId]);
+            const weightResult = await super.delete(this.memoryWeightsTable, 'session_id = ?', [chatId]);
+            const messageResult = await super.delete(this.conversationTable, 'chat_id = ?', [chatId]);
             
             return {
                 deletedMessages: messageResult.deletedCount,
                 deletedWeights: weightResult.deletedCount,
-                sessionId
+                chatId
             };
         });
     }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { formatDate } from '../../utils/dateFormatter';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -427,6 +427,16 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, userId, onCl
   const [availableModels, setAvailableModels] = useState<LLMModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   
+  // Image upload state
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<{
+    data: string;
+    filename: string;
+    mimetype: string;
+    size: number;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   // LLM override state
   const [useCustomModel, setUseCustomModel] = useState(false);
   const [customModel, setCustomModel] = useState('');
@@ -442,6 +452,14 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, userId, onCl
         background: character.definition || '',
         avatar: character.display !== 'default.png' ? character.display : ''
       });
+      
+      // Set image preview if character has an image
+      if (character.display && character.display !== 'default.png') {
+        setImagePreview(character.display);
+      } else {
+        setImagePreview(null);
+      }
+      setImageFile(null);
       
       // Load LLM preferences if they exist
       if (character.llm_preferences?.conversational) {
@@ -466,6 +484,8 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, userId, onCl
         background: '',
         avatar: ''
       });
+      setImagePreview(null);
+      setImageFile(null);
       setUseCustomModel(false);
       setCustomModel('');
       setCustomTemperature(0.7);
@@ -492,6 +512,94 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, userId, onCl
       setLoadingModels(false);
     }
   };
+  
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+    
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size must be less than 5MB');
+      return;
+    }
+    
+    // Read file and convert to base64
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      // Remove data URL prefix to get just the base64 data
+      const base64Data = result.split(',')[1];
+      
+      setImagePreview(result);
+      setImageFile({
+        data: base64Data,
+        filename: file.name,
+        mimetype: file.type,
+        size: file.size
+      });
+      
+      // Clear the avatar URL field if an image is uploaded
+      setFormData(prev => ({ ...prev, avatar: '' }));
+    };
+    reader.readAsDataURL(file);
+  };
+  
+  const handleRemoveImage = () => {
+    setImagePreview(null);
+    setImageFile(null);
+  };
+  
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image size must be less than 5MB');
+        return;
+      }
+      
+      // Read file and convert to base64
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        const base64Data = result.split(',')[1];
+        
+        setImagePreview(result);
+        setImageFile({
+          data: base64Data,
+          filename: file.name,
+          mimetype: file.type,
+          size: file.size
+        });
+        
+        // Clear the avatar URL field if an image is uploaded
+        setFormData(prev => ({ ...prev, avatar: '' }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -514,6 +622,14 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, userId, onCl
       // Include user_id for new character creation
       if (!character) {
         requestBody.user_id = userId;
+      }
+      
+      // Include image data if a file was uploaded
+      if (imageFile) {
+        requestBody.imageData = imageFile.data;
+        requestBody.imageFilename = imageFile.filename;
+        requestBody.imageMimetype = imageFile.mimetype;
+        requestBody.imageSize = imageFile.size;
       }
       
       if (useCustomModel && customModel) {
@@ -565,12 +681,18 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, userId, onCl
         <div className="p-4 md:p-6 space-y-3 md:space-y-4">
           {/* Avatar Preview */}
           <div className="text-center mb-4 md:mb-6">
-            <div className="w-20 h-20 md:w-24 md:h-24 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-3 md:mb-4">
-              {formData.avatar && formData.avatar.trim() ? (
+            <div className="w-20 h-20 md:w-24 md:h-24 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-3 md:mb-4 overflow-hidden">
+              {imagePreview ? (
+                <img 
+                  src={imagePreview} 
+                  alt="Avatar Preview"
+                  className="w-full h-full object-cover"
+                />
+              ) : formData.avatar && formData.avatar.trim() ? (
                 <img 
                   src={formData.avatar} 
                   alt="Avatar"
-                  className="w-full h-full rounded-full object-cover"
+                  className="w-full h-full object-cover"
                 />
               ) : (
                 <span className="text-2xl md:text-3xl font-bold text-white">
@@ -578,6 +700,15 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, userId, onCl
                 </span>
               )}
             </div>
+            {imagePreview && (
+              <button
+                type="button"
+                onClick={handleRemoveImage}
+                className="text-xs md:text-sm text-red-600 hover:text-red-700 font-medium"
+              >
+                Remove Image
+              </button>
+            )}
           </div>
 
           {/* Name */}
@@ -622,18 +753,81 @@ const CharacterModal: React.FC<CharacterModalProps> = ({ character, userId, onCl
             />
           </div>
 
-          {/* Avatar URL */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Avatar URL (optional)
+          {/* Avatar Upload/URL Section */}
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-700">
+              Avatar Image (optional)
             </label>
-            <input
-              type="url"
-              value={formData.avatar}
-              onChange={(e) => setFormData({ ...formData, avatar: e.target.value })}
-              className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
-              placeholder="https://example.com/avatar.jpg"
-            />
+            
+            {/* File Upload */}
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+              <div 
+                className={`flex items-center justify-center w-full px-4 py-3 border-2 border-dashed rounded-lg transition-colors ${
+                  imagePreview 
+                    ? 'border-green-300 bg-green-50' 
+                    : 'border-gray-300 hover:border-blue-400 cursor-pointer bg-gray-50 hover:bg-blue-50'
+                }`}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                onClick={() => {
+                  if (!imagePreview && fileInputRef.current) {
+                    fileInputRef.current.click();
+                  }
+                }}
+              >
+                <div className="space-y-1 text-center">
+                  {imagePreview ? (
+                    <>
+                      <svg className="mx-auto h-8 w-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <p className="text-sm text-green-600 font-medium">Image uploaded successfully!</p>
+                      <p className="text-xs text-gray-500">Click "Remove Image" above to change</p>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="mx-auto h-8 w-8 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <div className="text-xs md:text-sm text-gray-600">
+                        <span className="font-semibold text-blue-600 hover:text-blue-700">Click to upload</span> or drag and drop
+                      </div>
+                      <p className="text-xs text-gray-500">PNG, JPG, GIF up to 5MB</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            {/* Or divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="px-2 bg-white text-gray-500">OR</span>
+              </div>
+            </div>
+            
+            {/* URL Input */}
+            <div>
+              <input
+                type="url"
+                value={formData.avatar}
+                onChange={(e) => setFormData({ ...formData, avatar: e.target.value })}
+                disabled={!!imagePreview}
+                className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base disabled:bg-gray-100 disabled:cursor-not-allowed"
+                placeholder="https://example.com/avatar.jpg"
+              />
+              <p className="mt-1 text-xs text-gray-500">Enter a URL to use an image from the web</p>
+            </div>
           </div>
 
           {/* LLM Override Section */}

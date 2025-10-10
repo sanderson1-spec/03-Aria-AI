@@ -30,9 +30,9 @@ describe('MemorySearchService', () => {
         // Mock database service with DAL
         mockDAL = {
             memories: {
-                searchSignificantMemories: jest.fn()
+                getSignificantMemories: jest.fn()
             },
-            conversationLogs: {
+            conversations: {
                 getMessagesByIds: jest.fn()
             }
         };
@@ -242,7 +242,7 @@ describe('MemorySearchService', () => {
                 }
             ];
 
-            mockDAL.memories.searchSignificantMemories.mockResolvedValue(mockMemories);
+            mockDAL.memories.getSignificantMemories.mockResolvedValue(mockMemories);
 
             const result = await memorySearchService.searchSignificantMemories(
                 chatId,
@@ -251,7 +251,7 @@ describe('MemorySearchService', () => {
             );
 
             expect(result).toEqual(mockMemories);
-            expect(mockDAL.memories.searchSignificantMemories).toHaveBeenCalledWith(
+            expect(mockDAL.memories.getSignificantMemories).toHaveBeenCalledWith(
                 chatId,
                 excludeIds,
                 threshold
@@ -263,11 +263,11 @@ describe('MemorySearchService', () => {
             const excludeIds = [5, 6, 7, 8, 9];
             const threshold = 7;
 
-            mockDAL.memories.searchSignificantMemories.mockResolvedValue([]);
+            mockDAL.memories.getSignificantMemories.mockResolvedValue([]);
 
             await memorySearchService.searchSignificantMemories(chatId, excludeIds, threshold);
 
-            expect(mockDAL.memories.searchSignificantMemories).toHaveBeenCalledWith(
+            expect(mockDAL.memories.getSignificantMemories).toHaveBeenCalledWith(
                 chatId,
                 excludeIds,
                 threshold
@@ -287,7 +287,7 @@ describe('MemorySearchService', () => {
                 total_significance: 7 + (i % 3)
             }));
 
-            mockDAL.memories.searchSignificantMemories.mockResolvedValue(manyMemories);
+            mockDAL.memories.getSignificantMemories.mockResolvedValue(manyMemories);
 
             const result = await memorySearchService.searchSignificantMemories(
                 chatId,
@@ -304,7 +304,7 @@ describe('MemorySearchService', () => {
             const excludeIds = [1, 2, 3];
             const threshold = 9;
 
-            mockDAL.memories.searchSignificantMemories.mockResolvedValue([]);
+            mockDAL.memories.getSignificantMemories.mockResolvedValue([]);
 
             const result = await memorySearchService.searchSignificantMemories(
                 chatId,
@@ -450,11 +450,11 @@ describe('MemorySearchService', () => {
                 reasoning: 'Memories about injury and recovery'
             };
 
-            mockDAL.conversationLogs.getMessagesByIds.mockResolvedValue(mockRecentMessages);
+            mockDAL.conversations.getMessagesByIds.mockResolvedValue(mockRecentMessages);
             mockDeps.structuredResponse.generateStructuredResponse
                 .mockResolvedValueOnce(mockSearchIntent)
                 .mockResolvedValueOnce(mockFilterResult);
-            mockDAL.memories.searchSignificantMemories.mockResolvedValue(mockCandidateMemories);
+            mockDAL.memories.getSignificantMemories.mockResolvedValue(mockCandidateMemories);
 
             const result = await memorySearchService.executeDeepSearch(
                 chatId,
@@ -466,8 +466,8 @@ describe('MemorySearchService', () => {
             expect(result).toHaveLength(2);
             expect(result[0].content).toBe('User has ACL injury');
             expect(result[1].content).toBe('User is in physical therapy');
-            expect(mockDAL.conversationLogs.getMessagesByIds).toHaveBeenCalledWith(recentMessageIds);
-            expect(mockDAL.memories.searchSignificantMemories).toHaveBeenCalledWith(
+            expect(mockDAL.conversations.getMessagesByIds).toHaveBeenCalledWith(recentMessageIds);
+            expect(mockDAL.memories.getSignificantMemories).toHaveBeenCalledWith(
                 chatId,
                 recentMessageIds,
                 threshold
@@ -490,7 +490,7 @@ describe('MemorySearchService', () => {
                 reasoning: 'Simple greeting'
             };
 
-            mockDAL.conversationLogs.getMessagesByIds.mockResolvedValue(mockRecentMessages);
+            mockDAL.conversations.getMessagesByIds.mockResolvedValue(mockRecentMessages);
             mockDeps.structuredResponse.generateStructuredResponse.mockResolvedValue(mockSearchIntent);
 
             const result = await memorySearchService.executeDeepSearch(
@@ -501,7 +501,7 @@ describe('MemorySearchService', () => {
             );
 
             expect(result).toBeNull();
-            expect(mockDAL.memories.searchSignificantMemories).not.toHaveBeenCalled();
+            expect(mockDAL.memories.getSignificantMemories).not.toHaveBeenCalled();
         });
 
         test('should return empty array when no candidate memories found', async () => {
@@ -520,9 +520,9 @@ describe('MemorySearchService', () => {
                 reasoning: 'References past event'
             };
 
-            mockDAL.conversationLogs.getMessagesByIds.mockResolvedValue(mockRecentMessages);
+            mockDAL.conversations.getMessagesByIds.mockResolvedValue(mockRecentMessages);
             mockDeps.structuredResponse.generateStructuredResponse.mockResolvedValue(mockSearchIntent);
-            mockDAL.memories.searchSignificantMemories.mockResolvedValue([]);
+            mockDAL.memories.getSignificantMemories.mockResolvedValue([]);
 
             const result = await memorySearchService.executeDeepSearch(
                 chatId,
@@ -558,11 +558,11 @@ describe('MemorySearchService', () => {
                 reasoning: 'All relate to health'
             };
 
-            mockDAL.conversationLogs.getMessagesByIds.mockResolvedValue(mockRecentMessages);
+            mockDAL.conversations.getMessagesByIds.mockResolvedValue(mockRecentMessages);
             mockDeps.structuredResponse.generateStructuredResponse
                 .mockResolvedValueOnce(mockSearchIntent)
                 .mockResolvedValueOnce(mockFilterResult);
-            mockDAL.memories.searchSignificantMemories.mockResolvedValue(mockCandidateMemories);
+            mockDAL.memories.getSignificantMemories.mockResolvedValue(mockCandidateMemories);
 
             const result = await memorySearchService.executeDeepSearch(
                 chatId,
@@ -581,7 +581,7 @@ describe('MemorySearchService', () => {
             const excludeIds = [];
             const threshold = 9;
 
-            mockDAL.memories.searchSignificantMemories.mockResolvedValue([]);
+            mockDAL.memories.getSignificantMemories.mockResolvedValue([]);
 
             const result = await memorySearchService.searchSignificantMemories(
                 chatId,
@@ -654,7 +654,7 @@ describe('MemorySearchService', () => {
             const excludeIds = [];
             const threshold = 7;
 
-            mockDAL.memories.searchSignificantMemories.mockRejectedValue(
+            mockDAL.memories.getSignificantMemories.mockRejectedValue(
                 new Error('Database connection failed')
             );
 
@@ -697,7 +697,7 @@ describe('MemorySearchService', () => {
             const recentMessageIds = [1];
             const threshold = 7;
 
-            mockDAL.conversationLogs.getMessagesByIds.mockRejectedValue(
+            mockDAL.conversations.getMessagesByIds.mockRejectedValue(
                 new Error('Failed to fetch messages')
             );
 
@@ -711,7 +711,7 @@ describe('MemorySearchService', () => {
             const excludeIds = [1, 2, 3];
             const threshold = 7;
 
-            mockDAL.memories.searchSignificantMemories.mockRejectedValue(
+            mockDAL.memories.getSignificantMemories.mockRejectedValue(
                 new Error('Query failed')
             );
 

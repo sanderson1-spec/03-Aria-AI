@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
+import { getCharacterImageUrl } from '../../utils/characterImageCache';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Chat {
   id: string;
@@ -27,7 +29,9 @@ export const CollapsibleConversationList: React.FC<CollapsibleConversationListPr
   onCreateNewChat,
   className = '',
 }) => {
+  const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(true);
+  const [loadedImages, setLoadedImages] = useState<Record<string, string>>({});
 
   // Remember collapsed state in localStorage
   const storageKey = 'aria-conversation-list-expanded';
@@ -42,6 +46,34 @@ export const CollapsibleConversationList: React.FC<CollapsibleConversationListPr
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(isExpanded));
   }, [isExpanded]);
+
+  // Load character images
+  useEffect(() => {
+    if (!user) return;
+    
+    const loadImages = async () => {
+      const images: Record<string, string> = {};
+      
+      for (const chat of chats) {
+        if (chat.characterAvatar) {
+          try {
+            const imageUrl = await getCharacterImageUrl(
+              chat.characterAvatar,
+              chat.characterId,
+              user.id
+            );
+            images[chat.id] = imageUrl;
+          } catch (error) {
+            console.error(`Failed to load image for chat ${chat.id}:`, error);
+          }
+        }
+      }
+      
+      setLoadedImages(images);
+    };
+    
+    loadImages();
+  }, [chats, user]);
 
   const toggleExpanded = () => {
     setIsExpanded(!isExpanded);
@@ -119,14 +151,22 @@ export const CollapsibleConversationList: React.FC<CollapsibleConversationListPr
                       className="w-full p-3 text-left transition-colors"
                     >
                       <div className="flex items-center space-x-3">
-                        <img
-                          src={`/avatars/${chat.characterAvatar}`}
-                          alt={chat.characterName}
-                          className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.characterName)}&background=random`;
-                          }}
-                        />
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {loadedImages[chat.id] ? (
+                            <img
+                              src={loadedImages[chat.id]}
+                              alt={chat.characterName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.characterName)}&background=random`;
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-white font-bold text-sm">
+                              {chat.characterName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
                         <div className="flex-1 min-w-0 pr-8">
                           <div className="flex items-center justify-between">
                             <h3 className={`font-medium truncate ${

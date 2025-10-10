@@ -103,7 +103,7 @@ class AuthRepository extends BaseRepository {
      */
     async createSession(userId, deviceInfo = {}, ipAddress = null) {
         try {
-            const sessionId = this.generateId();
+            const chatId = this.generateId();
             const sessionToken = crypto.randomBytes(32).toString('hex'); // Simple random token
             
             const expiresAt = new Date();
@@ -127,7 +127,7 @@ class AuthRepository extends BaseRepository {
             const sessionData = JSON.stringify({ token: sessionToken });
             
             await this.dal.execute(sql, [
-                sessionId,
+                chatId,
                 userId,
                 JSON.stringify(deviceInfo),
                 ipAddress,
@@ -136,7 +136,7 @@ class AuthRepository extends BaseRepository {
             ]);
             
             return {
-                sessionId,
+                chatId,
                 sessionToken,
                 userId,
                 expiresAt: expiresAt.toISOString()
@@ -184,7 +184,7 @@ class AuthRepository extends BaseRepository {
     /**
      * Update session last_active timestamp
      */
-    async updateSessionActivity(sessionId) {
+    async updateSessionActivity(chatId) {
         try {
             const sql = `
                 UPDATE user_sessions 
@@ -192,9 +192,9 @@ class AuthRepository extends BaseRepository {
                 WHERE id = ?
             `;
             
-            await this.dal.execute(sql, [sessionId]);
+            await this.dal.execute(sql, [chatId]);
         } catch (error) {
-            throw this.errorHandler.wrapRepositoryError(error, 'Failed to update session activity', { sessionId });
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to update session activity', { chatId });
         }
     }
 

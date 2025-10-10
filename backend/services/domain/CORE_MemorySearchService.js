@@ -108,7 +108,7 @@ Respond with JSON:
                 threshold: significanceThreshold
             });
 
-            const memories = await this.dal.memories.searchSignificantMemories(
+            const memories = await this.dal.memories.getSignificantMemories(
                 chatId,
                 excludeMessageIds,
                 significanceThreshold
@@ -225,7 +225,7 @@ Respond with JSON:
             });
 
             // Get recent messages for context
-            const recentMessages = await this.dal.conversationLogs.getMessagesByIds(recentMessageIds);
+            const recentMessages = await this.dal.conversations.getMessagesByIds(recentMessageIds);
 
             // Step 1: Analyze search intent
             const searchIntent = await this.analyzeSearchIntent(userMessage, recentMessages);

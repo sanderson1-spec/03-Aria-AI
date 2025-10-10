@@ -43,7 +43,7 @@ function createAuthMiddleware(serviceFactory) {
 
             // Attach user info to request
             req.user = validation.user;
-            req.sessionId = validation.sessionId;
+            req.chatId = validation.chatId;
             req.sessionToken = sessionToken;
 
             next();
@@ -74,7 +74,7 @@ function createOptionalAuthMiddleware(serviceFactory) {
                 
                 if (validation.valid) {
                     req.user = validation.user;
-                    req.sessionId = validation.sessionId;
+                    req.chatId = validation.chatId;
                     req.sessionToken = sessionToken;
                 }
             }

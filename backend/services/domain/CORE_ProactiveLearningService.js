@@ -79,7 +79,7 @@ class ProactiveLearningService extends AbstractService {
     async recordProactiveDecision(decision, context) {
         try {
             const engagementId = await this.dal.proactive.recordEngagementAttempt({
-                sessionId: context.sessionId,
+                chatId: context.chatId,
                 personalityId: context.personality.id,
                 triggerType: decision.engagement_timing === 'immediate' ? 'immediate' : 'scheduled',
                 psychologicalContext: context.psychologicalState,
@@ -90,7 +90,7 @@ class ProactiveLearningService extends AbstractService {
 
             this.logger.info('Recorded proactive decision for learning', 'ProactiveLearning', {
                 engagementId,
-                sessionId: context.sessionId,
+                chatId: context.chatId,
                 personalityId: context.personality.id,
                 shouldEngage: decision.should_engage_proactively
             });
@@ -102,7 +102,7 @@ class ProactiveLearningService extends AbstractService {
                 'Failed to record proactive decision for learning') || error;
             this.logger.error('Error recording proactive decision', 'ProactiveLearning', {
                 error: wrappedError.message,
-                sessionId: context.sessionId
+                chatId: context.chatId
             });
             throw wrappedError;
         }
@@ -537,7 +537,7 @@ Respond with JSON containing the analysis.`;
     /**
      * DOMAIN LAYER: Get relevant learned patterns for decision making
      */
-    async getRelevantPatterns(personalityId, sessionId, contextType = null) {
+    async getRelevantPatterns(personalityId, chatId, contextType = null) {
         try {
             return await this.dal.proactive.getApplicablePatterns(
                 personalityId,
@@ -551,7 +551,7 @@ Respond with JSON containing the analysis.`;
             this.logger.error('Error getting relevant patterns', 'ProactiveLearning', {
                 error: error.message,
                 personalityId,
-                sessionId
+                chatId
             });
             return [];
         }

@@ -10,6 +10,19 @@ class ChatRepository extends BaseRepository {
     }
 
     /**
+     * Get image reference for personality
+     * For uploaded images, return an API reference instead of full base64
+     * This prevents localStorage and request headers from becoming too large
+     */
+    _getImageReference(personality_id, personality_display, image_type) {
+        if (image_type === 'upload') {
+            // Return API reference instead of base64 data
+            return `character-${personality_id}`;
+        }
+        return personality_display;
+    }
+
+    /**
      * Get paginated chats for user (MULTI-USER SUPPORT)
      * CLEAN ARCHITECTURE: Domain layer pagination with user isolation
      */
@@ -18,7 +31,8 @@ class ChatRepository extends BaseRepository {
             const offset = (page - 1) * pageSize;
             
             const sql = `
-                SELECT c.*, p.name as personality_name, p.display as personality_display
+                SELECT c.*, p.id as personality_id_ref, p.name as personality_name, p.display as personality_display,
+                       p.image_type
                 FROM ${this.tableName} c
                 LEFT JOIN personalities p ON c.personality_id = p.id
                 WHERE c.user_id = ? AND c.is_active = 1
@@ -27,10 +41,21 @@ class ChatRepository extends BaseRepository {
             `;
             
             const chats = await this.dal.query(sql, [userId, pageSize, offset]);
+            
+            // Use image reference instead of full base64
+            const processedChats = chats.map(chat => ({
+                ...chat,
+                personality_display: this._getImageReference(
+                    chat.personality_id_ref || chat.personality_id,
+                    chat.personality_display,
+                    chat.image_type
+                )
+            }));
+            
             const totalCount = await this.count({ user_id: userId, is_active: 1 });
 
             return {
-                chats,
+                chats: processedChats,
                 pagination: {
                     page,
                     pageSize,
@@ -77,7 +102,8 @@ class ChatRepository extends BaseRepository {
     async getUserChat(userId, chatId) {
         try {
             const sql = `
-                SELECT c.*, p.name as personality_name, p.display as personality_display
+                SELECT c.*, p.id as personality_id_ref, p.name as personality_name, p.display as personality_display,
+                       p.image_type
                 FROM ${this.tableName} c
                 LEFT JOIN personalities p ON c.personality_id = p.id
                 WHERE c.id = ? AND c.user_id = ? AND c.is_active = 1
@@ -86,6 +112,13 @@ class ChatRepository extends BaseRepository {
             const chat = await this.dal.queryOne(sql, [chatId, userId]);
             
             if (chat) {
+                // Use image reference instead of full base64
+                chat.personality_display = this._getImageReference(
+                    chat.personality_id_ref || chat.personality_id,
+                    chat.personality_display,
+                    chat.image_type
+                );
+                
                 // Get message count
                 const messageCountSql = `SELECT COUNT(*) as count FROM conversation_logs WHERE chat_id = ? AND user_id = ?`;
                 const countResult = await this.dal.queryOne(messageCountSql, [chatId, userId]);
@@ -105,7 +138,8 @@ class ChatRepository extends BaseRepository {
     async getRecentUserChats(userId, limit = 10) {
         try {
             const sql = `
-                SELECT c.*, p.name as personality_name, p.display as personality_display,
+                SELECT c.*, p.id as personality_id_ref, p.name as personality_name, p.display as personality_display,
+                       p.image_type,
                        COUNT(cl.id) as message_count
                 FROM ${this.tableName} c
                 LEFT JOIN personalities p ON c.personality_id = p.id
@@ -116,7 +150,17 @@ class ChatRepository extends BaseRepository {
                 LIMIT ?
             `;
             
-            return await this.dal.query(sql, [userId, limit]);
+            const chats = await this.dal.query(sql, [userId, limit]);
+            
+            // Use image reference instead of full base64
+            return chats.map(chat => ({
+                ...chat,
+                personality_display: this._getImageReference(
+                    chat.personality_id_ref || chat.personality_id,
+                    chat.personality_display,
+                    chat.image_type
+                )
+            }));
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get recent user chats', { userId, limit });
         }
@@ -222,7 +266,8 @@ class ChatRepository extends BaseRepository {
     async searchUserChats(userId, searchTerm, limit = 20) {
         try {
             const sql = `
-                SELECT c.*, p.name as personality_name, p.display as personality_display
+                SELECT c.*, p.id as personality_id_ref, p.name as personality_name, p.display as personality_display,
+                       p.image_type
                 FROM ${this.tableName} c
                 LEFT JOIN personalities p ON c.personality_id = p.id
                 WHERE c.user_id = ? AND c.is_active = 1 
@@ -232,7 +277,17 @@ class ChatRepository extends BaseRepository {
             `;
             
             const searchPattern = `%${searchTerm}%`;
-            return await this.dal.query(sql, [userId, searchPattern, searchPattern, limit]);
+            const chats = await this.dal.query(sql, [userId, searchPattern, searchPattern, limit]);
+            
+            // Use image reference instead of full base64
+            return chats.map(chat => ({
+                ...chat,
+                personality_display: this._getImageReference(
+                    chat.personality_id_ref || chat.personality_id,
+                    chat.personality_display,
+                    chat.image_type
+                )
+            }));
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to search user chats', { userId, searchTerm, limit });
         }
@@ -245,7 +300,8 @@ class ChatRepository extends BaseRepository {
     async getUserChatsByPersonality(userId, personalityId, limit = 50) {
         try {
             const sql = `
-                SELECT c.*, p.name as personality_name, p.display as personality_display
+                SELECT c.*, p.id as personality_id_ref, p.name as personality_name, p.display as personality_display,
+                       p.image_type
                 FROM ${this.tableName} c
                 LEFT JOIN personalities p ON c.personality_id = p.id
                 WHERE c.user_id = ? AND c.personality_id = ? AND c.is_active = 1
@@ -253,7 +309,17 @@ class ChatRepository extends BaseRepository {
                 LIMIT ?
             `;
             
-            return await this.dal.query(sql, [userId, personalityId, limit]);
+            const chats = await this.dal.query(sql, [userId, personalityId, limit]);
+            
+            // Use image reference instead of full base64
+            return chats.map(chat => ({
+                ...chat,
+                personality_display: this._getImageReference(
+                    chat.personality_id_ref || chat.personality_id,
+                    chat.personality_display,
+                    chat.image_type
+                )
+            }));
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get user chats by personality', { userId, personalityId, limit });
         }

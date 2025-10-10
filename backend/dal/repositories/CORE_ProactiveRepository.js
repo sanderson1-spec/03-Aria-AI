@@ -21,7 +21,7 @@ class ProactiveRepository extends BaseRepository {
      */
     async recordEngagementAttempt(engagementData) {
         const {
-            sessionId,
+            chatId,
             personalityId,
             triggerType,
             psychologicalContext,
@@ -30,14 +30,14 @@ class ProactiveRepository extends BaseRepository {
             engagementTiming
         } = engagementData;
 
-        // Get user_id from chat (sessionId is actually chatId)
-        const chat = await this.dal.queryOne('SELECT user_id FROM chats WHERE id = ?', [sessionId]);
+        // Get user_id from chat (chatId is actually chatId)
+        const chat = await this.dal.queryOne('SELECT user_id FROM chats WHERE id = ?', [chatId]);
         
         if (!chat) {
             throw this.errorHandler.wrapRepositoryError(
                 new Error('Chat not found'),
                 'Cannot record engagement attempt for non-existent chat',
-                { sessionId }
+                { chatId }
             );
         }
 
@@ -61,7 +61,7 @@ class ProactiveRepository extends BaseRepository {
         const params = [
             engagementId,
             chat.user_id,
-            sessionId,
+            chatId,
             personalityId,
             triggerType || 'intelligence_driven',
             decisionReasoning || 'Proactive engagement opportunity identified',
@@ -74,14 +74,14 @@ class ProactiveRepository extends BaseRepository {
             await this.dal.execute(sql, params);
             this.logger.info('Recorded proactive engagement attempt', 'ProactiveRepository', {
                 engagementId,
-                sessionId,
+                chatId,
                 personalityId
             });
             return engagementId;
         } catch (error) {
             this.logger.error('Failed to record proactive engagement attempt', 'ProactiveRepository', {
                 error: error.message,
-                sessionId,
+                chatId,
                 personalityId
             });
             throw error;

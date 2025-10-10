@@ -63,11 +63,18 @@ describe('ConversationRepository', () => {
 
         test('should save message with proper validation', async () => {
             const mockMessage = { id: 'msg-1', content: 'Test message' };
+            const mockChat = { user_id: 'user-123' };
+            
+            mockDeps.dal.queryOne.mockResolvedValue(mockChat);
             mockDeps.dal.create.mockResolvedValue(mockMessage);
 
-            const result = await conversationRepo.saveMessage('session-123', 'user', 'Hello', 'human', {});
+            const result = await conversationRepo.saveMessage('chat-123', 'user', 'Hello', 'human', {});
 
             expect(result).toBeDefined();
+            expect(mockDeps.dal.queryOne).toHaveBeenCalledWith(
+                'SELECT user_id FROM chats WHERE id = ?',
+                ['chat-123']
+            );
             expect(mockDeps.dal.create).toHaveBeenCalled();
         });
 

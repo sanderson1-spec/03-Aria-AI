@@ -103,7 +103,7 @@ class CharactersRoutes {
                     });
                 }
 
-                const { name, description, background, avatar } = req.body;
+                const { name, description, background, avatar, imageData, imageFilename, imageMimetype, imageSize } = req.body;
                 
                 if (!name || !name.trim()) {
                     return res.status(400).json({ 
@@ -122,6 +122,14 @@ class CharactersRoutes {
                     background: background?.trim() || '',
                     avatar: avatar || null
                 };
+                
+                // Handle image upload data
+                if (imageData) {
+                    characterData.imageData = imageData;
+                    characterData.imageFilename = imageFilename;
+                    characterData.imageMimetype = imageMimetype;
+                    characterData.imageSize = imageSize;
+                }
                 
                 const result = await databaseService.getDAL().personalities.createCharacter(characterData);
                 
@@ -152,7 +160,7 @@ class CharactersRoutes {
                 }
 
                 const { characterId } = req.params;
-                const { name, description, background, avatar, llm_preferences } = req.body;
+                const { name, description, background, avatar, llm_preferences, imageData, imageFilename, imageMimetype, imageSize } = req.body;
                 const databaseService = this.serviceFactory.get('database');
                 
                 // Check if character exists
@@ -199,6 +207,14 @@ class CharactersRoutes {
                 if (background !== undefined) updateData.background = background.trim();
                 if (avatar !== undefined) updateData.avatar = avatar;
                 if (llm_preferences !== undefined) updateData.llm_preferences = llm_preferences;
+                
+                // Handle image upload data
+                if (imageData) {
+                    updateData.imageData = imageData;
+                    updateData.imageFilename = imageFilename;
+                    updateData.imageMimetype = imageMimetype;
+                    updateData.imageSize = imageSize;
+                }
                 
                 const result = await databaseService.getDAL().personalities.updateCharacter(characterId, updateData);
                 
@@ -305,7 +321,7 @@ class CharactersRoutes {
                 
                 // Format export data with version and metadata
                 const exportData = {
-                    version: '1.0',
+                    version: '2.0', // Updated version to indicate image data support
                     character: {
                         name: character.name,
                         description: character.description || '',
@@ -318,6 +334,19 @@ class CharactersRoutes {
                     exported_at: new Date().toISOString()
                 };
                 
+                // Include image data if it's stored in the database
+                if (character.image_type === 'upload' && character.image_data) {
+                    try {
+                        const metadata = character.image_metadata ? JSON.parse(character.image_metadata) : {};
+                        exportData.character.imageData = character.image_data;
+                        exportData.character.imageFilename = metadata.filename || 'exported_image';
+                        exportData.character.imageMimetype = metadata.mimetype || 'image/jpeg';
+                        exportData.character.imageSize = metadata.size || 0;
+                    } catch (e) {
+                        console.warn('Failed to parse image metadata for export', e);
+                    }
+                }
+                
                 // Set headers for file download
                 const filename = `${character.name.replace(/[^a-zA-Z0-9]/g, '_')}_character_export.json`;
                 res.setHeader('Content-Type', 'application/json');
@@ -329,6 +358,53 @@ class CharactersRoutes {
                 console.error('Character Export API Error:', error);
                 res.status(500).json({ 
                     error: 'Failed to export character', 
+                    details: error.message 
+                });
+            }
+        });
+
+        // Get character image
+        this.router.get('/:characterId/image', async (req, res) => {
+            try {
+                const userId = this.extractUserId(req);
+                if (!userId) {
+                    return res.status(400).json({ 
+                        error: 'userId required',
+                        details: 'Provide userId as query parameter or x-user-id header'
+                    });
+                }
+
+                const { characterId } = req.params;
+                const databaseService = this.serviceFactory.get('database');
+                
+                const character = await databaseService.getDAL().personalities.getCharacter(characterId);
+                
+                if (!character) {
+                    return res.status(404).json({ 
+                        error: 'Character not found' 
+                    });
+                }
+
+                // Verify ownership
+                if (character.user_id !== userId) {
+                    return res.status(404).json({ 
+                        error: 'Character not found' 
+                    });
+                }
+                
+                // Return the display URL (already converted to data URL in repository)
+                res.json({
+                    success: true,
+                    data: {
+                        characterId: character.id,
+                        imageUrl: character.display
+                    }
+                });
+
+            } catch (error) {
+                console.error('Character Image API Error:', error);
+                res.status(500).json({ 
+                    error: 'Failed to get character image', 
                     details: error.message 
                 });
             }
@@ -438,6 +514,14 @@ class CharactersRoutes {
                     avatar: characterData.avatar || null,
                     llm_preferences: validatedLLMPreferences
                 };
+                
+                // Handle image data from import
+                if (characterData.imageData) {
+                    newCharacterData.imageData = characterData.imageData;
+                    newCharacterData.imageFilename = characterData.imageFilename;
+                    newCharacterData.imageMimetype = characterData.imageMimetype;
+                    newCharacterData.imageSize = characterData.imageSize;
+                }
                 
                 const result = await databaseService.getDAL().personalities.createCharacter(newCharacterData);
                 

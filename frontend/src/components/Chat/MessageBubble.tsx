@@ -7,9 +7,11 @@ import ReactMarkdown from 'react-markdown';
 
 interface MessageBubbleProps {
   message: Message;
+  characterAvatar?: string;
+  characterName?: string;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, characterAvatar, characterName }) => {
   const isUser = message.type === 'user';
   const isSystem = message.type === 'system';
   const isProactive = message.metadata?.proactive;
@@ -32,13 +34,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
     )}>
       {/* Avatar */}
       <div className={clsx(
-        "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-        isUser ? "bg-primary-500" : "bg-gray-300"
+        "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden",
+        isUser ? "bg-primary-500" : "bg-gradient-to-br from-purple-500 to-pink-500"
       )}>
         {isUser ? (
           <User className="w-4 h-4 text-white" />
+        ) : characterAvatar && characterAvatar !== 'default.png' ? (
+          <img 
+            src={characterAvatar.startsWith('http') ? characterAvatar : `/avatars/${characterAvatar}`}
+            alt={characterName || 'Character'}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = characterName 
+                ? `https://ui-avatars.com/api/?name=${encodeURIComponent(characterName)}&background=random`
+                : 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"%3E%3C/svg%3E';
+            }}
+          />
         ) : (
-          <Bot className="w-4 h-4 text-gray-600" />
+          <div className="w-full h-full flex items-center justify-center text-white font-bold text-sm">
+            {characterName?.charAt(0).toUpperCase() || <Bot className="w-4 h-4 text-white" />}
+          </div>
         )}
       </div>
 

@@ -330,7 +330,7 @@ IMPORTANT: Use the current timestamp (${timestamp}) for all relative time calcul
     /**
      * Get comprehensive system context for LLMs - THE central method
      */
-    static getSystemContext(sessionId = null) {
+    static getSystemContext(chatId = null) {
         const now = new Date();
         return {
             dateTime: this.getSystemPromptDateTime(now),

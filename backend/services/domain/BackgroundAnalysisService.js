@@ -75,7 +75,7 @@ class BackgroundAnalysisService extends AbstractService {
     /**
      * Process all background analysis for a completed message exchange
      * @param {Object} context - Message context
-     * @param {string} context.sessionId - Chat session ID
+     * @param {string} context.chatId - Chat session ID
      * @param {string} context.userId - User ID
      * @param {string} context.characterId - Character/personality ID
      * @param {string} context.userMessage - User's message
@@ -84,31 +84,31 @@ class BackgroundAnalysisService extends AbstractService {
      * @param {Object} context.character - Character configuration
      */
     async processMessageAnalysis(context) {
-        const { sessionId, userId, characterId, userMessage, aiResponse, psychologyState, character } = context;
+        const { chatId, userId, characterId, userMessage, aiResponse, psychologyState, character } = context;
         
         try {
-            this.logger.info('Starting background analysis', 'BackgroundAnalysisService', { sessionId });
+            this.logger.info('Starting background analysis', 'BackgroundAnalysisService', { chatId });
 
             // Get conversation history for all analyses
-            const conversationHistory = await this.dal.conversations.getSessionHistory(sessionId, 10, 0);
+            const conversationHistory = await this.dal.conversations.getSessionHistory(chatId, 10, 0);
 
             // Run all background analyses concurrently (non-blocking)
             const analysisPromises = [
-                this._runPsychologyAnalysis(sessionId, conversationHistory, userMessage, character),
+                this._runPsychologyAnalysis(chatId, conversationHistory, userMessage, character),
                 this._runConversationAnalysis(conversationHistory, userMessage),
-                this._runProactiveAnalysis(sessionId, userId, characterId, userMessage, aiResponse, psychologyState, character, conversationHistory),
-                this._runLearningExtraction(sessionId, userId, characterId, userMessage, aiResponse)
+                this._runProactiveAnalysis(chatId, userId, characterId, userMessage, aiResponse, psychologyState, character, conversationHistory),
+                this._runLearningExtraction(chatId, userId, characterId, userMessage, aiResponse)
             ];
 
             // Wait for all analyses to complete (or fail gracefully)
             await Promise.allSettled(analysisPromises);
 
-            this.logger.info('Background analysis completed', 'BackgroundAnalysisService', { sessionId });
+            this.logger.info('Background analysis completed', 'BackgroundAnalysisService', { chatId });
 
         } catch (error) {
             // Log error but don't throw - background processing should never fail the main request
             this.logger.error('Background analysis failed', 'BackgroundAnalysisService', { 
-                sessionId, 
+                chatId, 
                 error: error.message 
             });
         }
@@ -117,12 +117,12 @@ class BackgroundAnalysisService extends AbstractService {
     /**
      * Run psychology analysis and state updates
      */
-    async _runPsychologyAnalysis(sessionId, conversationHistory, userMessage, character) {
+    async _runPsychologyAnalysis(chatId, conversationHistory, userMessage, character) {
         try {
-            await this.psychology.analyzeAndUpdateState(sessionId, conversationHistory, userMessage, character);
+            await this.psychology.analyzeAndUpdateState(chatId, conversationHistory, userMessage, character);
         } catch (error) {
             this.logger.error('Psychology analysis failed', 'BackgroundAnalysisService', { 
-                sessionId, 
+                chatId, 
                 error: error.message 
             });
         }
@@ -144,10 +144,19 @@ class BackgroundAnalysisService extends AbstractService {
     /**
      * Run proactive intelligence analysis and delivery
      */
-    async _runProactiveAnalysis(sessionId, userId, characterId, userMessage, aiResponse, psychologyState, character, conversationHistory) {
+    async _runProactiveAnalysis(chatId, userId, characterId, userMessage, aiResponse, psychologyState, character, conversationHistory) {
         try {
+            // === PROACTIVE DEBUG LOGGING ===
+            this.logger.info('===== PROACTIVE DEBUG =====', 'BackgroundAnalysisService', {
+                conversationHistoryLength: conversationHistory?.length || 0,
+                firstMessage: conversationHistory?.[0] ? JSON.stringify(conversationHistory[0]) : 'none',
+                lastMessage: conversationHistory?.[conversationHistory.length - 1] ? JSON.stringify(conversationHistory[conversationHistory.length - 1]) : 'none'
+            });
+            this.logger.info('===========================', 'BackgroundAnalysisService');
+            // === END DEBUG LOGGING ===
+            
             // Get conversation state for timing context
-            const conversationState = await this.dal.conversations.getConversationState(sessionId);
+            const conversationState = await this.dal.conversations.getConversationState(chatId);
             
             // Analyze proactive opportunity
             const decision = await this.proactiveIntelligence.analyzeProactiveOpportunity({
@@ -159,7 +168,7 @@ class BackgroundAnalysisService extends AbstractService {
                 conversationState,
                 learnedPatterns: [], // TODO: Implement pattern retrieval
                 sessionContext: {
-                    sessionId,
+                    chatId,
                     userId,
                     personalityId: characterId,
                     personalityName: character.name
@@ -180,7 +189,7 @@ class BackgroundAnalysisService extends AbstractService {
                     // Only create commitment if confidence exceeds threshold
                     if (confidence > confidenceThreshold) {
                         this.logger.info('Creating commitment record', 'BackgroundAnalysisService', {
-                            sessionId,
+                            chatId,
                             userId,
                             commitmentType: commitmentData?.commitment_type,
                             confidence: confidence,
@@ -190,7 +199,7 @@ class BackgroundAnalysisService extends AbstractService {
                         // Create commitment record
                         const commitmentId = await this.dal.commitments.createCommitment({
                             user_id: userId,
-                            chat_id: sessionId,
+                            chat_id: chatId,
                             character_id: characterId,
                             description: commitmentData?.description || 'No description provided',
                             commitment_type: commitmentData?.commitment_type || 'task',
@@ -202,7 +211,7 @@ class BackgroundAnalysisService extends AbstractService {
 
                         this.logger.info('Commitment created successfully', 'BackgroundAnalysisService', {
                             commitmentId,
-                            sessionId,
+                            chatId,
                             userId
                         });
 
@@ -220,7 +229,7 @@ class BackgroundAnalysisService extends AbstractService {
                                     
                                     // Schedule follow-up using ProactiveDeliveryService
                                     this.proactiveDelivery.scheduleProactiveMessage({
-                                        sessionId,
+                                        chatId,
                                         userId,
                                         personalityId: characterId,
                                         personalityName: character.name,
@@ -255,7 +264,7 @@ class BackgroundAnalysisService extends AbstractService {
                     } else {
                         // Log low-confidence detection for monitoring
                         this.logger.info('Low-confidence commitment not created', 'BackgroundAnalysisService', {
-                            sessionId,
+                            chatId,
                             userId,
                             confidence: confidence,
                             threshold: confidenceThreshold,
@@ -264,7 +273,7 @@ class BackgroundAnalysisService extends AbstractService {
                     }
                 } catch (commitmentError) {
                     this.logger.error('Failed to create commitment record', 'BackgroundAnalysisService', {
-                        sessionId,
+                        chatId,
                         userId,
                         error: commitmentError.message
                     });
@@ -278,7 +287,7 @@ class BackgroundAnalysisService extends AbstractService {
                     const eventData = decision.event_detected.event;
                     
                     this.logger.info('Creating event record', 'BackgroundAnalysisService', {
-                        sessionId,
+                        chatId,
                         userId,
                         eventTitle: eventData?.title,
                         recurrenceType: eventData?.recurrence_type
@@ -293,7 +302,7 @@ class BackgroundAnalysisService extends AbstractService {
                     await this.dal.events.createEvent({
                         id: eventId,
                         user_id: userId,
-                        chat_id: sessionId,
+                        chat_id: chatId,
                         character_id: characterId,
                         title: eventData?.title || 'Scheduled Event',
                         description: eventData?.description || '',
@@ -307,7 +316,7 @@ class BackgroundAnalysisService extends AbstractService {
 
                     this.logger.info('Event created successfully', 'BackgroundAnalysisService', {
                         eventId,
-                        sessionId,
+                        chatId,
                         userId,
                         title: eventData?.title,
                         nextOccurrence
@@ -315,7 +324,7 @@ class BackgroundAnalysisService extends AbstractService {
 
                 } catch (eventError) {
                     this.logger.error('Failed to create event record', 'BackgroundAnalysisService', {
-                        sessionId,
+                        chatId,
                         userId,
                         error: eventError.message
                     });
@@ -325,7 +334,7 @@ class BackgroundAnalysisService extends AbstractService {
 
             // Process the decision for delivery if proactive engagement is recommended
             this.logger.info('Checking proactive decision condition', 'BackgroundAnalysisService', {
-                sessionId,
+                chatId,
                 hasProactiveDelivery: !!this.proactiveDelivery,
                 hasDecision: !!decision,
                 shouldEngage: decision?.should_engage_proactively,
@@ -335,13 +344,13 @@ class BackgroundAnalysisService extends AbstractService {
             
             if (this.proactiveDelivery && decision && decision.should_engage_proactively) {
                 this.logger.info('Calling ProactiveDeliveryService', 'BackgroundAnalysisService', { 
-                    sessionId,
+                    chatId,
                     decisionKeys: Object.keys(decision)
                 });
                 
                 try {
                     await this.proactiveDelivery.processProactiveDecision(decision, {
-                        sessionId,
+                        chatId,
                         userId,
                         personality: {
                             id: characterId,
@@ -351,18 +360,18 @@ class BackgroundAnalysisService extends AbstractService {
                     });
 
                     this.logger.info('Proactive engagement processed successfully', 'BackgroundAnalysisService', { 
-                        sessionId, 
+                        chatId, 
                         shouldEngage: decision.should_engage_proactively 
                     });
                 } catch (error) {
                     this.logger.error('Error in ProactiveDeliveryService', 'BackgroundAnalysisService', {
-                        sessionId,
+                        chatId,
                         error: error.message
                     });
                 }
             } else {
                 this.logger.info('Proactive delivery condition not met', 'BackgroundAnalysisService', {
-                    sessionId,
+                    chatId,
                     hasProactiveDelivery: !!this.proactiveDelivery,
                     hasDecision: !!decision,
                     shouldEngage: decision?.should_engage_proactively
@@ -371,7 +380,7 @@ class BackgroundAnalysisService extends AbstractService {
 
         } catch (error) {
             this.logger.error('Proactive analysis failed', 'BackgroundAnalysisService', { 
-                sessionId, 
+                chatId, 
                 error: error.message 
             });
         }
@@ -380,10 +389,10 @@ class BackgroundAnalysisService extends AbstractService {
     /**
      * Run learning pattern extraction
      */
-    async _runLearningExtraction(sessionId, userId, characterId, userMessage, aiResponse) {
+    async _runLearningExtraction(chatId, userId, characterId, userMessage, aiResponse) {
         try {
             await this.proactiveLearning.extractPatternsFromEngagements([{
-                sessionId,
+                chatId,
                 userId,
                 personalityId: characterId,
                 userMessage,
@@ -392,7 +401,7 @@ class BackgroundAnalysisService extends AbstractService {
             }]);
         } catch (error) {
             this.logger.error('Learning extraction failed', 'BackgroundAnalysisService', { 
-                sessionId, 
+                chatId, 
                 error: error.message 
             });
         }

@@ -211,7 +211,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
         // Send a chat message (non-streaming)
         this.router.post('/message', async (req, res) => {
             try {
-                const { message, sessionId, userId, characterId } = req.body;
+                const { message, chatId, userId, characterId } = req.body;
                 
                 if (!userId) {
                     return res.status(400).json({ 
@@ -240,7 +240,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 const memorySearch = this.serviceFactory.get('memorySearch');
 
                 // Create or get session
-                const actualSessionId = sessionId || uuidv4();
+                const actualSessionId = chatId || uuidv4();
 
                 // Save user message to database
                 const userMessageId = await databaseService.getDAL().conversations.saveMessage(
@@ -293,6 +293,20 @@ Stay in character as ${character.name}. You have complete awareness of all this 
 
                 // Get conversation state for context awareness
                 const conversationState = await databaseService.getDAL().conversations.getConversationState(actualSessionId);
+                
+                // === DEBUG: Log conversation state ===
+                const logger = this.serviceFactory.get('logger');
+                if (logger) {
+                    logger.info('===== CONVERSATION STATE =====', 'ChatRoutes', {
+                        chatId: actualSessionId,
+                        messagesExchanged: conversationState?.messages_exchanged,
+                        lastMessagePreview: conversationState?.last_message?.message?.substring(0, 100),
+                        lastMessageSender: conversationState?.last_message_sender,
+                        conversationDuration: conversationState?.conversation_duration_minutes
+                    });
+                    logger.info('==============================', 'ChatRoutes');
+                }
+                // === END DEBUG ===
 
                 // Get last 5 messages for conversation flow context
                 const recentMessages = await databaseService.getDAL().conversations.getSessionHistory(actualSessionId, 5);
@@ -345,7 +359,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 res.json({
                     success: true,
                     data: {
-                        sessionId: actualSessionId,
+                        chatId: actualSessionId,
                         aiResponse: aiResponse.content || aiResponse,
                         psychologyState: psychologyState, // Send current state immediately
                         userMessageId,
@@ -362,7 +376,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                     try {
                         const backgroundAnalysis = this.serviceFactory.get('backgroundAnalysis');
                         await backgroundAnalysis.processMessageAnalysis({
-                            sessionId: actualSessionId,
+                            chatId: actualSessionId,
                             userId: userId,
                             characterId: characterId,
                             userMessage: message,
@@ -387,7 +401,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
         // Send a chat message with streaming (OPTIMIZED FOR FAST USER RESPONSE)
         this.router.post('/stream', async (req, res) => {
             try {
-                const { message, sessionId, userId, characterId } = req.body;
+                const { message, chatId, userId, characterId } = req.body;
                 
                 if (!userId) {
                     return res.status(400).json({ 
@@ -425,7 +439,19 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 const memorySearch = this.serviceFactory.get('memorySearch');
 
                 // Create or get session
-                const actualSessionId = sessionId || uuidv4();
+                const actualSessionId = chatId || uuidv4();
+
+                // Ensure chat exists before saving messages
+                const existingChat = await databaseService.getDAL().chats.findById(actualSessionId);
+                if (!existingChat) {
+                    // Create chat if it doesn't exist
+                    await databaseService.getDAL().chats.createChat(userId, {
+                        id: actualSessionId,
+                        title: `Chat with ${characterId}`,
+                        personality_id: characterId,
+                        chat_metadata: {}
+                    });
+                }
 
                 // FAST OPERATIONS: Do these immediately
                 // Save user message to database
@@ -440,7 +466,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 // Send initial session data
                 res.write(`data: ${JSON.stringify({
                     type: 'session',
-                    sessionId: actualSessionId,
+                    chatId: actualSessionId,
                     userMessageId
                 })}\n\n`);
 
@@ -493,6 +519,21 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 
                 try {
                     conversationState = await databaseService.getDAL().conversations.getConversationState(actualSessionId);
+                    
+                    // === DEBUG: Log conversation state (streaming) ===
+                    const logger = this.serviceFactory.get('logger');
+                    if (logger) {
+                        logger.info('===== CONVERSATION STATE (STREAMING) =====', 'ChatRoutes', {
+                            chatId: actualSessionId,
+                            messagesExchanged: conversationState?.messages_exchanged,
+                            lastMessagePreview: conversationState?.last_message?.message?.substring(0, 100),
+                            lastMessageSender: conversationState?.last_message_sender,
+                            conversationDuration: conversationState?.conversation_duration_minutes
+                        });
+                        logger.info('==============================', 'ChatRoutes');
+                    }
+                    // === END DEBUG ===
+                    
                     recentMessages = await databaseService.getDAL().conversations.getSessionHistory(actualSessionId, 5);
                     context = await contextBuilder.buildUnifiedContext(userId, actualSessionId, characterId);
                     
@@ -593,7 +634,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                         console.log('🚀 Starting background processing for session:', actualSessionId);
                         const backgroundAnalysis = this.serviceFactory.get('backgroundAnalysis');
                         await backgroundAnalysis.processMessageAnalysis({
-                            sessionId: actualSessionId,
+                            chatId: actualSessionId,
                             userId: userId,
                             characterId: characterId,
                             userMessage: message,
@@ -620,16 +661,16 @@ Stay in character as ${character.name}. You have complete awareness of all this 
         });
 
         // Get chat history
-        this.router.get('/history/:sessionId', async (req, res) => {
+        this.router.get('/history/:chatId', async (req, res) => {
             try {
-                const { sessionId } = req.params;
+                const { chatId } = req.params;
                 const { userId } = req.query;
                 
                 // Note: userId is optional for history endpoint for backwards compatibility
                 // but should be provided for proper user isolation
 
                 const databaseService = this.serviceFactory.get('database');
-                const messages = await databaseService.getDAL().conversations.getSessionHistory(sessionId, 50, 0);
+                const messages = await databaseService.getDAL().conversations.getSessionHistory(chatId, 50, 0);
 
                 res.json({
                     success: true,
@@ -646,12 +687,12 @@ Stay in character as ${character.name}. You have complete awareness of all this 
         });
 
         // Get psychology state
-        this.router.get('/psychology/:sessionId', async (req, res) => {
+        this.router.get('/psychology/:chatId', async (req, res) => {
             try {
-                const { sessionId } = req.params;
+                const { chatId } = req.params;
                 
                 const psychologyService = this.serviceFactory.get('psychology');
-                const psychologyState = await psychologyService.getCharacterState(sessionId);
+                const psychologyState = await psychologyService.getCharacterState(chatId);
 
                 res.json({
                     success: true,
@@ -676,9 +717,9 @@ Stay in character as ${character.name}. You have complete awareness of all this 
         });
 
         // Server-Sent Events endpoint for proactive messages
-        this.router.get('/proactive/:sessionId', async (req, res) => {
+        this.router.get('/proactive/:chatId', async (req, res) => {
             try {
-                const { sessionId } = req.params;
+                const { chatId } = req.params;
                 
                 // Set up Server-Sent Events headers (CORS already handled by main middleware)
                 res.writeHead(200, {
@@ -690,7 +731,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 // Send initial connection confirmation
                 res.write(`data: ${JSON.stringify({
                     type: 'connected',
-                    sessionId: sessionId,
+                    chatId: chatId,
                     timestamp: new Date().toISOString()
                 })}\n\n`);
 
@@ -708,7 +749,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 }
 
                 // Register session for proactive message delivery
-                const cleanup = proactiveDelivery.registerSession(sessionId, (message) => {
+                const cleanup = proactiveDelivery.registerSession(chatId, (message) => {
                     try {
                         res.write(`data: ${JSON.stringify({
                             type: 'proactive-message',
@@ -737,7 +778,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 // Handle client disconnect
                 req.on('close', () => {
                     if (this.logger && this.logger.debug) {
-                        this.logger.debug(`Proactive SSE connection closed for session ${sessionId}`, 'ChatRoutes');
+                        this.logger.debug(`Proactive SSE connection closed for session ${chatId}`, 'ChatRoutes');
                     }
                     clearInterval(heartbeatInterval);
                     cleanup();
@@ -747,11 +788,11 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                     // ECONNRESET is normal when client disconnects
                     if (error.code === 'ECONNRESET' || error.message === 'aborted') {
                         if (this.logger && this.logger.debug) {
-                            this.logger.debug(`Proactive SSE client disconnected: ${sessionId}`, 'ChatRoutes');
+                            this.logger.debug(`Proactive SSE client disconnected: ${chatId}`, 'ChatRoutes');
                         }
                     } else {
                         if (this.logger && this.logger.error) {
-                            this.logger.error(`Proactive SSE connection error for session ${sessionId}`, 'ChatRoutes', {
+                            this.logger.error(`Proactive SSE connection error for session ${chatId}`, 'ChatRoutes', {
                                 error: error.message,
                                 code: error.code
                             });
@@ -764,7 +805,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
             } catch (error) {
                 this.logger.error('Proactive SSE API Error', 'ChatRoutes', {
                     error: error.message,
-                    sessionId
+                    chatId
                 });
                 res.status(500).json({ 
                     error: 'Failed to establish proactive message stream', 

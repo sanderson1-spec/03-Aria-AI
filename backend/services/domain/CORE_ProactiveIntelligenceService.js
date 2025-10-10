@@ -482,7 +482,11 @@ IMPORTANT: Interpret these states through the lens of YOUR unique personality fr
         
         return history
             .slice(-5)  // Last 5 exchanges for context
-            .map(msg => `${msg.sender}: "${msg.message}"`)
+            .map(msg => {
+                const sender = msg.sender || msg.role || 'unknown';
+                const message = msg.message || msg.content || '';
+                return `${sender}: "${message}"`;
+            })
             .join('\n');
     }
 
