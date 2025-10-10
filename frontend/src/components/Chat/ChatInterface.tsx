@@ -108,6 +108,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           messages={messages} 
           isTyping={isTyping}
           characterName={currentSession.character.name}
+          characterAvatar={currentSession.character.avatar}
         />
       </div>
 

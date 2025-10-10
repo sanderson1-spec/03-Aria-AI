@@ -53,6 +53,61 @@ class ChatRoutes {
         return completions.map(c => `- ${c.title} (${c.type}, completed: ${c.completed_at || c.updated_at})`).join('\n');
     }
 
+    // Shared method to build system prompt - used by both streaming and non-streaming routes
+    buildSystemPrompt(character, characterBackground, dateTimeContext, userProfile, conversationState, recentMessages, context, deepMemories) {
+        return `You are ${character.name}, ${character.description}
+${characterBackground ? `\nBackground: ${characterBackground}` : ''}
+
+${dateTimeContext}
+
+${userProfile ? `USER PROFILE:
+Name: ${userProfile.name || 'Unknown'}
+${userProfile.birthdate ? `Birthdate: ${userProfile.birthdate}` : ''}
+${userProfile.bio ? `About them: ${userProfile.bio}` : ''}
+
+This is baseline information about the user. Reference it naturally without asking for details already provided.
+
+` : ''}CONVERSATION CONTEXT:
+- This conversation started ${this.formatDuration(conversationState.conversation_started_at)}
+- Messages exchanged: ${conversationState.messages_exchanged}
+- This is an ONGOING conversation, not a fresh start
+${conversationState.last_message ? `- Your last message: "${conversationState.last_message.message}"` : ''}
+
+CONVERSATION FLOW PRINCIPLES:
+- Remember what you JUST said - don't repeat yourself or contradict recent statements
+- If you asked a question in your last message, you're waiting for their response
+- Don't re-greet unless there's been a significant break (hours/days since last message)
+- Match the natural rhythm of this specific conversation
+- Stay consistent with your recent emotional tone and topics
+
+Recent conversation flow:
+${recentMessages.reverse().map(m => `${m.sender === 'user' ? 'Them' : 'You'}: ${m.message}`).join('\n')}
+
+RECENT CONVERSATION (last ${context.recentMessages.length} messages):
+${this.formatMessages(context.recentMessages)}
+
+YOUR PSYCHOLOGICAL STATE:
+- Mood: ${context.psychologyState?.current_emotion || 'neutral'}
+- Energy: ${context.psychologyState?.energy_level || 5}/10
+- Relationship: ${context.psychologyState?.relationship_dynamic || 'developing'}
+
+TOP MEMORIES:
+${this.formatMemories(context.topMemories)}
+
+${deepMemories && deepMemories.length > 0 ? `RELEVANT PAST MEMORIES:
+${this.formatMemories(deepMemories)}
+` : ''}ACTIVE COMMITMENTS:
+${this.formatCommitments(context.activeCommitments)}
+
+UPCOMING EVENTS:
+${this.formatEvents(context.upcomingEvents)}
+
+RECENT COMPLETIONS:
+${this.formatCompletions(context.recentCompletions)}
+
+Stay in character as ${character.name}. You have complete awareness of all this context.`;
+    }
+
     setupRoutes() {
         // CORS is handled by main server middleware
 
@@ -156,7 +211,7 @@ class ChatRoutes {
         // Send a chat message (non-streaming)
         this.router.post('/message', async (req, res) => {
             try {
-                const { message, sessionId, userId, characterId } = req.body;
+                const { message, chatId, userId, characterId } = req.body;
                 
                 if (!userId) {
                     return res.status(400).json({ 
@@ -185,7 +240,7 @@ class ChatRoutes {
                 const memorySearch = this.serviceFactory.get('memorySearch');
 
                 // Create or get session
-                const actualSessionId = sessionId || uuidv4();
+                const actualSessionId = chatId || uuidv4();
 
                 // Save user message to database
                 const userMessageId = await databaseService.getDAL().conversations.saveMessage(
@@ -238,6 +293,20 @@ class ChatRoutes {
 
                 // Get conversation state for context awareness
                 const conversationState = await databaseService.getDAL().conversations.getConversationState(actualSessionId);
+                
+                // === DEBUG: Log conversation state ===
+                const logger = this.serviceFactory.get('logger');
+                if (logger) {
+                    logger.info('===== CONVERSATION STATE =====', 'ChatRoutes', {
+                        chatId: actualSessionId,
+                        messagesExchanged: conversationState?.messages_exchanged,
+                        lastMessagePreview: conversationState?.last_message?.message?.substring(0, 100),
+                        lastMessageSender: conversationState?.last_message_sender,
+                        conversationDuration: conversationState?.conversation_duration_minutes
+                    });
+                    logger.info('==============================', 'ChatRoutes');
+                }
+                // === END DEBUG ===
 
                 // Get last 5 messages for conversation flow context
                 const recentMessages = await databaseService.getDAL().conversations.getSessionHistory(actualSessionId, 5);
@@ -261,58 +330,17 @@ class ChatRoutes {
                 const characterBackground = character.definition || '';
                 const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
                 
-                const systemPrompt = `You are ${character.name}, ${character.description}
-${characterBackground ? `\nBackground: ${characterBackground}` : ''}
-
-${dateTimeContext}
-
-${userProfile ? `USER PROFILE:
-Name: ${userProfile.name || 'Unknown'}
-${userProfile.birthdate ? `Birthdate: ${userProfile.birthdate}` : ''}
-${userProfile.bio ? `About them: ${userProfile.bio}` : ''}
-
-This is baseline information about the user. Reference it naturally without asking for details already provided.
-
-` : ''}CONVERSATION CONTEXT:
-- This conversation started ${this.formatDuration(conversationState.conversation_started_at)}
-- Messages exchanged: ${conversationState.messages_exchanged}
-- This is an ONGOING conversation, not a fresh start
-${conversationState.last_message ? `- Your last message: "${conversationState.last_message.message}"` : ''}
-
-CONVERSATION FLOW PRINCIPLES:
-- Remember what you JUST said - don't repeat yourself or contradict recent statements
-- If you asked a question in your last message, you're waiting for their response
-- Don't re-greet unless there's been a significant break (hours/days since last message)
-- Match the natural rhythm of this specific conversation
-- Stay consistent with your recent emotional tone and topics
-
-Recent conversation flow:
-${recentMessages.reverse().map(m => `${m.sender === 'user' ? 'Them' : 'You'}: ${m.message}`).join('\n')}
-
-RECENT CONVERSATION (last ${context.recentMessages.length} messages):
-${this.formatMessages(context.recentMessages)}
-
-YOUR PSYCHOLOGICAL STATE:
-- Mood: ${context.psychologyState?.current_emotion || 'neutral'}
-- Energy: ${context.psychologyState?.energy_level || 5}/10
-- Relationship: ${context.psychologyState?.relationship_dynamic || 'developing'}
-
-TOP MEMORIES:
-${this.formatMemories(context.topMemories)}
-
-${deepMemories && deepMemories.length > 0 ? `RELEVANT PAST MEMORIES:
-${this.formatMemories(deepMemories)}
-` : ''}
-ACTIVE COMMITMENTS:
-${this.formatCommitments(context.activeCommitments)}
-
-UPCOMING EVENTS:
-${this.formatEvents(context.upcomingEvents)}
-
-RECENT COMPLETIONS:
-${this.formatCompletions(context.recentCompletions)}
-
-Stay in character as ${character.name}. You have complete awareness of all this context.`;
+                // Use shared method to build system prompt
+                const systemPrompt = this.buildSystemPrompt(
+                    character,
+                    characterBackground,
+                    dateTimeContext,
+                    userProfile,
+                    conversationState,
+                    recentMessages,
+                    context,
+                    deepMemories
+                );
 
                 // Generate AI response using LLM service (convert to string format)
                 const fullPrompt = `${systemPrompt}\n\nUser: ${message}\n${character.name}:`;
@@ -331,7 +359,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 res.json({
                     success: true,
                     data: {
-                        sessionId: actualSessionId,
+                        chatId: actualSessionId,
                         aiResponse: aiResponse.content || aiResponse,
                         psychologyState: psychologyState, // Send current state immediately
                         userMessageId,
@@ -348,7 +376,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                     try {
                         const backgroundAnalysis = this.serviceFactory.get('backgroundAnalysis');
                         await backgroundAnalysis.processMessageAnalysis({
-                            sessionId: actualSessionId,
+                            chatId: actualSessionId,
                             userId: userId,
                             characterId: characterId,
                             userMessage: message,
@@ -373,7 +401,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
         // Send a chat message with streaming (OPTIMIZED FOR FAST USER RESPONSE)
         this.router.post('/stream', async (req, res) => {
             try {
-                const { message, sessionId, userId, characterId } = req.body;
+                const { message, chatId, userId, characterId } = req.body;
                 
                 if (!userId) {
                     return res.status(400).json({ 
@@ -407,9 +435,23 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 const proactiveIntelligence = this.serviceFactory.get('proactiveIntelligence');
                 const proactiveLearning = this.serviceFactory.get('proactiveLearning');
                 const databaseService = this.serviceFactory.get('database');
+                const contextBuilder = this.serviceFactory.get('contextBuilder');
+                const memorySearch = this.serviceFactory.get('memorySearch');
 
                 // Create or get session
-                const actualSessionId = sessionId || uuidv4();
+                const actualSessionId = chatId || uuidv4();
+
+                // Ensure chat exists before saving messages
+                const existingChat = await databaseService.getDAL().chats.findById(actualSessionId);
+                if (!existingChat) {
+                    // Create chat if it doesn't exist
+                    await databaseService.getDAL().chats.createChat(userId, {
+                        id: actualSessionId,
+                        title: `Chat with ${characterId}`,
+                        personality_id: characterId,
+                        chat_metadata: {}
+                    });
+                }
 
                 // FAST OPERATIONS: Do these immediately
                 // Save user message to database
@@ -424,7 +466,7 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 // Send initial session data
                 res.write(`data: ${JSON.stringify({
                     type: 'session',
-                    sessionId: actualSessionId,
+                    chatId: actualSessionId,
                     userMessageId
                 })}\n\n`);
 
@@ -472,23 +514,79 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                     }
                 }
 
-                // Prepare context for LLM with character-specific information
+                // Get conversation state for context awareness
+                let conversationState, recentMessages, context, deepMemories;
+                
+                try {
+                    conversationState = await databaseService.getDAL().conversations.getConversationState(actualSessionId);
+                    
+                    // === DEBUG: Log conversation state (streaming) ===
+                    const logger = this.serviceFactory.get('logger');
+                    if (logger) {
+                        logger.info('===== CONVERSATION STATE (STREAMING) =====', 'ChatRoutes', {
+                            chatId: actualSessionId,
+                            messagesExchanged: conversationState?.messages_exchanged,
+                            lastMessagePreview: conversationState?.last_message?.message?.substring(0, 100),
+                            lastMessageSender: conversationState?.last_message_sender,
+                            conversationDuration: conversationState?.conversation_duration_minutes
+                        });
+                        logger.info('==============================', 'ChatRoutes');
+                    }
+                    // === END DEBUG ===
+                    
+                    recentMessages = await databaseService.getDAL().conversations.getSessionHistory(actualSessionId, 5);
+                    context = await contextBuilder.buildUnifiedContext(userId, actualSessionId, characterId);
+                    
+                    // Get recent message IDs for exclusion in deep search
+                    const recentMessageIds = context.recentMessages.map(m => m.id).filter(id => id);
+                    
+                    // Execute deep memory search (significance threshold from config, default 7)
+                    const significanceThreshold = 7;
+                    deepMemories = await memorySearch.executeDeepSearch(
+                        actualSessionId, 
+                        message, 
+                        recentMessageIds, 
+                        significanceThreshold
+                    );
+                } catch (contextError) {
+                    // Fallback to minimal context if full context fails
+                    console.error('Failed to build full context, using minimal fallback:', contextError.message);
+                    
+                    conversationState = {
+                        conversation_started_at: new Date().toISOString(),
+                        messages_exchanged: 0,
+                        last_message: null
+                    };
+                    
+                    recentMessages = [];
+                    
+                    context = {
+                        recentMessages: [],
+                        psychologyState: psychologyState,
+                        topMemories: [],
+                        activeCommitments: [],
+                        upcomingEvents: [],
+                        recentCompletions: []
+                    };
+                    
+                    deepMemories = [];
+                }
+
+                // Prepare comprehensive context for LLM
                 const characterBackground = character.definition || '';
                 const dateTimeContext = DateTimeUtils.getSystemPromptDateTime();
-                const systemPrompt = `You are ${character.name}, ${character.description}
-${characterBackground ? `\nBackground: ${characterBackground}` : ''}
-
-${dateTimeContext}
-
-${userProfile ? `USER PROFILE:
-Name: ${userProfile.name || 'Unknown'}
-${userProfile.birthdate ? `Birthdate: ${userProfile.birthdate}` : ''}
-${userProfile.bio ? `About them: ${userProfile.bio}` : ''}
-
-This is baseline information about the user. Reference it naturally without asking for details already provided.
-
-` : ''}Current psychology state: mood=${psychologyState.mood || 'neutral'}, engagement=${psychologyState.engagement || 'moderate'}, energy=${psychologyState.energy || 75}.
-Stay in character as ${character.name}. Adapt your response based on this psychological context and your character traits. You are fully aware of the current date and time as provided above.`;
+                
+                // Use shared method to build system prompt
+                const systemPrompt = this.buildSystemPrompt(
+                    character,
+                    characterBackground,
+                    dateTimeContext,
+                    userProfile,
+                    conversationState,
+                    recentMessages,
+                    context,
+                    deepMemories
+                );
 
                 let fullAiResponse = '';
 
@@ -536,7 +634,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                         console.log('🚀 Starting background processing for session:', actualSessionId);
                         const backgroundAnalysis = this.serviceFactory.get('backgroundAnalysis');
                         await backgroundAnalysis.processMessageAnalysis({
-                            sessionId: actualSessionId,
+                            chatId: actualSessionId,
                             userId: userId,
                             characterId: characterId,
                             userMessage: message,
@@ -563,16 +661,16 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
         });
 
         // Get chat history
-        this.router.get('/history/:sessionId', async (req, res) => {
+        this.router.get('/history/:chatId', async (req, res) => {
             try {
-                const { sessionId } = req.params;
+                const { chatId } = req.params;
                 const { userId } = req.query;
                 
                 // Note: userId is optional for history endpoint for backwards compatibility
                 // but should be provided for proper user isolation
 
                 const databaseService = this.serviceFactory.get('database');
-                const messages = await databaseService.getDAL().conversations.getSessionHistory(sessionId, 50, 0);
+                const messages = await databaseService.getDAL().conversations.getSessionHistory(chatId, 50, 0);
 
                 res.json({
                     success: true,
@@ -589,12 +687,12 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
         });
 
         // Get psychology state
-        this.router.get('/psychology/:sessionId', async (req, res) => {
+        this.router.get('/psychology/:chatId', async (req, res) => {
             try {
-                const { sessionId } = req.params;
+                const { chatId } = req.params;
                 
                 const psychologyService = this.serviceFactory.get('psychology');
-                const psychologyState = await psychologyService.getCharacterState(sessionId);
+                const psychologyState = await psychologyService.getCharacterState(chatId);
 
                 res.json({
                     success: true,
@@ -619,9 +717,9 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
         });
 
         // Server-Sent Events endpoint for proactive messages
-        this.router.get('/proactive/:sessionId', async (req, res) => {
+        this.router.get('/proactive/:chatId', async (req, res) => {
             try {
-                const { sessionId } = req.params;
+                const { chatId } = req.params;
                 
                 // Set up Server-Sent Events headers (CORS already handled by main middleware)
                 res.writeHead(200, {
@@ -633,7 +731,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                 // Send initial connection confirmation
                 res.write(`data: ${JSON.stringify({
                     type: 'connected',
-                    sessionId: sessionId,
+                    chatId: chatId,
                     timestamp: new Date().toISOString()
                 })}\n\n`);
 
@@ -651,7 +749,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                 }
 
                 // Register session for proactive message delivery
-                const cleanup = proactiveDelivery.registerSession(sessionId, (message) => {
+                const cleanup = proactiveDelivery.registerSession(chatId, (message) => {
                     try {
                         res.write(`data: ${JSON.stringify({
                             type: 'proactive-message',
@@ -680,7 +778,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                 // Handle client disconnect
                 req.on('close', () => {
                     if (this.logger && this.logger.debug) {
-                        this.logger.debug(`Proactive SSE connection closed for session ${sessionId}`, 'ChatRoutes');
+                        this.logger.debug(`Proactive SSE connection closed for session ${chatId}`, 'ChatRoutes');
                     }
                     clearInterval(heartbeatInterval);
                     cleanup();
@@ -690,11 +788,11 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
                     // ECONNRESET is normal when client disconnects
                     if (error.code === 'ECONNRESET' || error.message === 'aborted') {
                         if (this.logger && this.logger.debug) {
-                            this.logger.debug(`Proactive SSE client disconnected: ${sessionId}`, 'ChatRoutes');
+                            this.logger.debug(`Proactive SSE client disconnected: ${chatId}`, 'ChatRoutes');
                         }
                     } else {
                         if (this.logger && this.logger.error) {
-                            this.logger.error(`Proactive SSE connection error for session ${sessionId}`, 'ChatRoutes', {
+                            this.logger.error(`Proactive SSE connection error for session ${chatId}`, 'ChatRoutes', {
                                 error: error.message,
                                 code: error.code
                             });
@@ -707,7 +805,7 @@ Stay in character as ${character.name}. Adapt your response based on this psycho
             } catch (error) {
                 this.logger.error('Proactive SSE API Error', 'ChatRoutes', {
                     error: error.message,
-                    sessionId
+                    chatId
                 });
                 res.status(500).json({ 
                     error: 'Failed to establish proactive message stream', 

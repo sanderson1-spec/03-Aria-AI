@@ -30,14 +30,14 @@ class UserSessionRepository extends BaseRepository {
      */
     async createSession(sessionData) {
         try {
-            const sessionId = require('uuid').v4();
+            const chatId = require('uuid').v4();
             const now = new Date().toISOString();
             
             // Calculate expiration (24 hours from now by default)
             const expiresAt = sessionData.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
             
             const session = {
-                id: sessionId,
+                id: chatId,
                 user_id: sessionData.user_id,
                 chat_id: sessionData.chat_id || null,
                 device_info: JSON.stringify(sessionData.device_info || {}),
@@ -50,7 +50,7 @@ class UserSessionRepository extends BaseRepository {
             };
 
             await this.create(session);
-            return await this.findById(sessionId);
+            return await this.findById(chatId);
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to create session', { sessionData });
         }
@@ -59,31 +59,31 @@ class UserSessionRepository extends BaseRepository {
     /**
      * DOMAIN LAYER: Update session activity
      */
-    async updateLastActive(sessionId) {
+    async updateLastActive(chatId) {
         try {
             const updates = {
                 last_active: new Date().toISOString()
             };
             
-            return await this.update(sessionId, updates);
+            return await this.update(chatId, updates);
         } catch (error) {
-            throw this.errorHandler.wrapRepositoryError(error, 'Failed to update session activity', { sessionId });
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to update session activity', { chatId });
         }
     }
 
     /**
      * DOMAIN LAYER: End session
      */
-    async endSession(sessionId) {
+    async endSession(chatId) {
         try {
             const updates = {
                 is_active: 0,
                 last_active: new Date().toISOString()
             };
             
-            return await this.update(sessionId, updates);
+            return await this.update(chatId, updates);
         } catch (error) {
-            throw this.errorHandler.wrapRepositoryError(error, 'Failed to end session', { sessionId });
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to end session', { chatId });
         }
     }
 
@@ -115,7 +115,7 @@ class UserSessionRepository extends BaseRepository {
     /**
      * DOMAIN LAYER: Get session with user info
      */
-    async getSessionWithUser(sessionId) {
+    async getSessionWithUser(chatId) {
         try {
             const sql = `
                 SELECT 
@@ -128,25 +128,25 @@ class UserSessionRepository extends BaseRepository {
                 WHERE s.id = ? AND s.is_active = 1
             `;
             
-            return await this.dal.queryOne(sql, [sessionId]);
+            return await this.dal.queryOne(sql, [chatId]);
         } catch (error) {
-            throw this.errorHandler.wrapRepositoryError(error, 'Failed to get session with user info', { sessionId });
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to get session with user info', { chatId });
         }
     }
 
     /**
      * DOMAIN LAYER: Update session chat association
      */
-    async updateSessionChat(sessionId, chatId) {
+    async updateSessionChat(userSessionId, chatId) {
         try {
             const updates = {
                 chat_id: chatId,
                 last_active: new Date().toISOString()
             };
             
-            return await this.update(sessionId, updates);
+            return await this.update(userSessionId, updates);
         } catch (error) {
-            throw this.errorHandler.wrapRepositoryError(error, 'Failed to update session chat', { sessionId, chatId });
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to update session chat', { userSessionId, chatId });
         }
     }
 }

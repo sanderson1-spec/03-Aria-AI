@@ -339,8 +339,9 @@ class PersonalityRepository extends BaseRepository {
                 'created_at DESC'
             );
             
-            // Parse llm_preferences JSON for each character
+            // Parse JSON fields and handle image data for each character
             return characters.map(character => {
+                // Parse llm_preferences JSON
                 if (character.llm_preferences) {
                     try {
                         character.llm_preferences = JSON.parse(character.llm_preferences);
@@ -349,6 +350,19 @@ class PersonalityRepository extends BaseRepository {
                         this.logger.warn('Failed to parse llm_preferences JSON', 'PersonalityRepository', { characterId: character.id });
                     }
                 }
+                
+                // Handle image data: if image_type is 'upload', convert to data URL
+                if (character.image_type === 'upload' && character.image_data) {
+                    try {
+                        const metadata = character.image_metadata ? JSON.parse(character.image_metadata) : {};
+                        const mimetype = metadata.mimetype || 'image/jpeg';
+                        // Convert base64 to data URL for frontend
+                        character.display = `data:${mimetype};base64,${character.image_data}`;
+                    } catch (e) {
+                        this.logger.warn('Failed to process image data', 'PersonalityRepository', { characterId: character.id });
+                    }
+                }
+                
                 return character;
             });
         } catch (error) {
@@ -384,13 +398,25 @@ class PersonalityRepository extends BaseRepository {
                 return null;
             }
             
+            // Parse llm_preferences JSON
             if (character.llm_preferences) {
-                // Parse JSON string to object
                 try {
                     character.llm_preferences = JSON.parse(character.llm_preferences);
                 } catch (e) {
                     // If parsing fails, leave as is
                     this.logger.warn('Failed to parse llm_preferences JSON', 'PersonalityRepository', { characterId });
+                }
+            }
+            
+            // Handle image data: if image_type is 'upload', convert to data URL
+            if (character.image_type === 'upload' && character.image_data) {
+                try {
+                    const metadata = character.image_metadata ? JSON.parse(character.image_metadata) : {};
+                    const mimetype = metadata.mimetype || 'image/jpeg';
+                    // Convert base64 to data URL for frontend
+                    character.display = `data:${mimetype};base64,${character.image_data}`;
+                } catch (e) {
+                    this.logger.warn('Failed to process image data', 'PersonalityRepository', { characterId });
                 }
             }
             
@@ -434,10 +460,27 @@ class PersonalityRepository extends BaseRepository {
                 is_active: 1
             };
 
+            // Handle image data if provided
+            if (characterData.imageData) {
+                data.image_data = characterData.imageData;
+                data.image_type = 'upload';
+                data.image_metadata = JSON.stringify({
+                    filename: characterData.imageFilename || 'uploaded_image',
+                    mimetype: characterData.imageMimetype || 'image/jpeg',
+                    size: characterData.imageSize || 0,
+                    uploadedAt: this.getCurrentTimestamp()
+                });
+            } else if (characterData.avatar && characterData.avatar.startsWith('http')) {
+                data.image_type = 'url';
+            } else {
+                data.image_type = 'path';
+            }
+
             const result = await this.create(data);
             this.logger.info('Character created successfully', 'PersonalityRepository', { 
                 characterId: result.id, 
-                userId: characterData.user_id 
+                userId: characterData.user_id,
+                imageType: data.image_type
             });
             return { created: true, id: result.id };
         } catch (error) {
@@ -478,6 +521,27 @@ class PersonalityRepository extends BaseRepository {
             }
             if (updateData.avatar !== undefined) {
                 data.display = updateData.avatar || 'default.png';
+                // Update image type based on avatar value
+                if (updateData.avatar && updateData.avatar.startsWith('http')) {
+                    data.image_type = 'url';
+                    data.image_data = null; // Clear any stored image data
+                } else if (!updateData.imageData) {
+                    data.image_type = 'path';
+                    data.image_data = null; // Clear any stored image data
+                }
+            }
+            // Handle image upload
+            if (updateData.imageData) {
+                data.image_data = updateData.imageData;
+                data.image_type = 'upload';
+                data.image_metadata = JSON.stringify({
+                    filename: updateData.imageFilename || 'uploaded_image',
+                    mimetype: updateData.imageMimetype || 'image/jpeg',
+                    size: updateData.imageSize || 0,
+                    uploadedAt: this.getCurrentTimestamp()
+                });
+                // When uploading image, update display to reference the image
+                data.display = updateData.imageFilename || 'uploaded_image';
             }
             if (updateData.llm_preferences !== undefined) {
                 // Store as JSON string if it's an object, or as-is if null

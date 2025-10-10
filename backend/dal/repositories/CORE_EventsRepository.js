@@ -192,6 +192,27 @@ class EventsRepository extends BaseRepository {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to calculate next occurrence');
         }
     }
+
+    /**
+     * Get recent completed events for a user
+     * @param {string} userId - User ID
+     * @param {number} limit - Maximum number to return
+     * @returns {Promise<Array>} Recent completed events
+     */
+    async getRecentCompletedEvents(userId, limit = 3) {
+        try {
+            const sql = `
+                SELECT * FROM events 
+                WHERE user_id = ? 
+                AND status = 'completed'
+                ORDER BY updated_at DESC 
+                LIMIT ?
+            `;
+            return await this.dal.query(sql, [userId, limit]);
+        } catch (error) {
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to get recent completed events', { userId, limit });
+        }
+    }
 }
 
 module.exports = EventsRepository;

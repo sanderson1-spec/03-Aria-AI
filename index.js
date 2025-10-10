@@ -15,6 +15,7 @@
 
 const { setupServices, shutdownServices, checkServicesHealth } = require('./setupServices');
 const APIServer = require('./backend/api/server');
+const { initializeDatabase } = require('./init-db');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -278,9 +279,51 @@ async function runCompleteApplication() {
         // Step 1: Environment validation
         console.log('🔍 Validating environment...');
         
-        // Step 2: Initialize database
+        // Step 2: Initialize database (auto-create if missing or empty)
         const dbPath = process.env.DB_PATH || path.join(__dirname, 'database', 'aria.db');
         console.log('🗄️  Checking database initialization...');
+        
+        // Check if database file exists AND has tables
+        let needsInitialization = false;
+        
+        if (!fs.existsSync(dbPath)) {
+            console.log('📦 Database not found');
+            needsInitialization = true;
+        } else {
+            // Database file exists, check if it has tables
+            const sqlite3 = require('sqlite3').verbose();
+            const hasTablesPromise = new Promise((resolve) => {
+                const db = new sqlite3.Database(dbPath, (err) => {
+                    if (err) {
+                        console.log('⚠️  Database file corrupted');
+                        resolve(false);
+                        return;
+                    }
+                    
+                    db.get("SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", (err, row) => {
+                        db.close();
+                        if (err || !row || row.count === 0) {
+                            console.log('⚠️  Database has no tables');
+                            resolve(false);
+                        } else {
+                            console.log(`✅ Database has ${row.count} tables`);
+                            resolve(true);
+                        }
+                    });
+                });
+            });
+            
+            const hasTables = await hasTablesPromise;
+            if (!hasTables) {
+                needsInitialization = true;
+            }
+        }
+        
+        if (needsInitialization) {
+            console.log('🔨 Initializing database...');
+            await initializeDatabase();
+            console.log('✅ Database initialized successfully');
+        }
         
         // Step 3: Setup services
         console.log('🏗️  Initializing service architecture...');

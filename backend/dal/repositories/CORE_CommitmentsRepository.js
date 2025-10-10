@@ -367,6 +367,27 @@ class CommitmentsRepository extends BaseRepository {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to get commitment with context', { commitmentId });
         }
     }
+
+    /**
+     * Get recent completed commitments for a user
+     * @param {string} userId - User ID
+     * @param {number} limit - Maximum number to return
+     * @returns {Promise<Array>} Recent completed commitments
+     */
+    async getRecentCompletedCommitments(userId, limit = 3) {
+        try {
+            const sql = `
+                SELECT * FROM commitments 
+                WHERE user_id = ? 
+                AND status = 'completed'
+                ORDER BY verified_at DESC 
+                LIMIT ?
+            `;
+            return await this.dal.query(sql, [userId, limit]);
+        } catch (error) {
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to get recent completed commitments', { userId, limit });
+        }
+    }
 }
 
 module.exports = CommitmentsRepository;

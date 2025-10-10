@@ -4,6 +4,7 @@ import { CollapsibleConversationList } from './CollapsibleConversationList';
 import { useAuth } from '../../contexts/AuthContext';
 import UserProfileModal from '../UserProfile/UserProfileModal';
 import { API_BASE_URL } from '../../config/api';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Chat {
   id: string;
@@ -39,6 +40,22 @@ const Navigation: React.FC<NavigationProps> = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [userProfile, setUserProfile] = useState<{ name?: string; birthdate?: string; bio?: string }>({ name: '', birthdate: '', bio: '' });
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Load collapsed state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('aria-sidebar-collapsed');
+    if (saved !== null) {
+      setIsCollapsed(JSON.parse(saved));
+    }
+  }, []);
+
+  // Save collapsed state to localStorage
+  const toggleCollapsed = () => {
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    localStorage.setItem('aria-sidebar-collapsed', JSON.stringify(newState));
+  };
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -119,15 +136,29 @@ const Navigation: React.FC<NavigationProps> = ({
 
   return (
     <div className={`
-      bg-white shadow-lg p-6 
-      md:w-80 md:static md:translate-x-0
-      fixed top-0 left-0 h-full w-80 z-50 
-      transition-transform duration-300 ease-in-out
-      ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-      overflow-y-auto
+      bg-white shadow-lg flex flex-col
+      ${isCollapsed ? 'md:w-20' : 'md:w-80'} md:relative md:h-screen
+      fixed top-0 left-0 h-full w-80 z-[70]
+      transition-all duration-300 ease-in-out
+      ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
     `}>
-      {/* Close button - Mobile only */}
-      <div className="md:hidden flex items-center justify-between mb-6">
+      {/* Collapse Toggle Button - Desktop only */}
+      <button
+        onClick={toggleCollapsed}
+        className="hidden md:flex absolute -right-3 top-6 w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full items-center justify-center shadow-lg transition-colors z-[110]"
+        aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        {isCollapsed ? (
+          <ChevronRight className="w-4 h-4" />
+        ) : (
+          <ChevronLeft className="w-4 h-4" />
+        )}
+      </button>
+
+      {/* Scrollable Content Wrapper */}
+      <div className={`flex-1 overflow-y-auto ${isCollapsed ? 'md:p-3 md:pt-3' : 'md:p-6 md:pt-6'} p-6 pt-20`}>
+        {/* Close button - Mobile only */}
+        <div className="md:hidden flex items-center justify-between mb-6 fixed top-0 left-0 right-0 bg-white p-4 border-b z-10">
         <h1 className="text-2xl font-bold text-blue-600">Aria AI</h1>
         <button
           onClick={onCloseMobileMenu}
@@ -141,7 +172,8 @@ const Navigation: React.FC<NavigationProps> = ({
       </div>
 
       {/* Desktop header */}
-      <h1 className="hidden md:block text-2xl font-bold text-blue-600 mb-6">Aria AI</h1>
+      {!isCollapsed && <h1 className="hidden md:block text-2xl font-bold text-blue-600 mb-6">Aria AI</h1>}
+      {isCollapsed && <div className="hidden md:block text-2xl font-bold text-blue-600 text-center mb-6">A</div>}
       
       <nav className="space-y-2">
         {navItems.map((item) => (
@@ -149,20 +181,21 @@ const Navigation: React.FC<NavigationProps> = ({
             key={item.path}
             to={item.path}
             onClick={handleNavClick}
+            title={isCollapsed ? item.label : undefined}
             className={`block p-3 rounded-lg font-medium transition-colors duration-200 ${
               location.pathname === item.path
                 ? 'bg-blue-50 text-blue-700'
                 : 'text-gray-600 hover:bg-gray-50'
-            }`}
+            } ${isCollapsed ? 'md:flex md:justify-center md:text-xl' : ''}`}
           >
-            <span className="mr-2">{item.icon}</span>
-            {item.label}
+            <span className={isCollapsed ? '' : 'mr-2'}>{item.icon}</span>
+            <span className={isCollapsed ? 'md:hidden' : ''}>{item.label}</span>
           </Link>
         ))}
       </nav>
       
-      {/* Conversation List - Only show on Chat page */}
-      {location.pathname === '/' && (
+      {/* Conversation List - Only show on Chat page and when not collapsed */}
+      {location.pathname === '/' && !isCollapsed && (
         <div className="mt-6">
           <CollapsibleConversationList
             chats={chats}
@@ -179,30 +212,39 @@ const Navigation: React.FC<NavigationProps> = ({
         <div className="relative">
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
+            title={isCollapsed ? user?.displayName || 'User' : undefined}
+            className={`w-full flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors ${
+              isCollapsed ? 'md:justify-center' : 'justify-between'
+            }`}
           >
-            <div className="flex items-center space-x-3">
+            <div className={`flex items-center ${isCollapsed ? '' : 'space-x-3'}`}>
               <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
                 {user?.displayName?.charAt(0).toUpperCase() || 'U'}
               </div>
-              <div className="text-left">
-                <p className="text-sm font-medium text-gray-900">{user?.displayName || 'User'}</p>
-                <p className="text-xs text-gray-500">@{user?.username}</p>
-              </div>
+              {!isCollapsed && (
+                <div className="text-left">
+                  <p className="text-sm font-medium text-gray-900">{user?.displayName || 'User'}</p>
+                  <p className="text-xs text-gray-500">@{user?.username}</p>
+                </div>
+              )}
             </div>
-            <svg 
-              className={`w-5 h-5 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`}
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
+            {!isCollapsed && (
+              <svg 
+                className={`w-5 h-5 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`}
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            )}
           </button>
 
           {/* Dropdown Menu */}
           {showUserMenu && (
-            <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2">
+            <div className={`absolute bottom-full mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 ${
+              isCollapsed ? 'md:left-0 md:w-48' : 'left-0 right-0'
+            }`}>
               <button
                 onClick={() => {
                   setShowProfileModal(true);
@@ -228,6 +270,7 @@ const Navigation: React.FC<NavigationProps> = ({
           )}
         </div>
       </div>
+      </div> {/* Close scrollable content wrapper */}
 
       {/* User Profile Modal */}
       <UserProfileModal

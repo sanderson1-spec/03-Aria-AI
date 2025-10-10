@@ -259,11 +259,11 @@ Create a comprehensive psychological framework that captures the character's cor
     /**
      * APPLICATION LAYER: Get current psychological state - direct DAL access
      */
-    async getCharacterState(sessionId) {
+    async getCharacterState(chatId) {
         return await this.withMetrics(async () => {
             try {
                 const dal = this.getDAL();
-                const state = await dal.psychology.getPsychologicalState(sessionId);
+                const state = await dal.psychology.getPsychologicalState(chatId);
                 
                 if (state) {
                     // Clean up any malformed JSON fields using centralized service
@@ -368,19 +368,19 @@ Convert to proper JSON format.`;
     /**
      * INFRASTRUCTURE LAYER: Update a specific JSON field in the database
      */
-    async updateDatabaseJsonField(sessionId, fieldName, value) {
+    async updateDatabaseJsonField(chatId, fieldName, value) {
         try {
             const dal = this.getDAL();
-            const currentState = await dal.psychology.getPsychologicalState(sessionId);
+            const currentState = await dal.psychology.getPsychologicalState(chatId);
             if (currentState) {
                 const updatedState = { ...currentState };
                 updatedState[fieldName] = value;
                 await dal.psychology.updatePsychologicalState(
-                    sessionId, 
+                    chatId, 
                     currentState.personality_id, 
                     updatedState
                 );
-                this.logger.info(`✅ Fixed database field ${fieldName} for session ${sessionId}`);
+                this.logger.info(`✅ Fixed database field ${fieldName} for session ${chatId}`);
             }
         } catch (error) {
             this.logger.warn(`Failed to update database field ${fieldName}:`, error.message);
@@ -390,7 +390,7 @@ Convert to proper JSON format.`;
     /**
      * DOMAIN LAYER: Initialize psychological state for new session
      */
-    async initializeCharacterState(sessionId, personalityId, framework) {
+    async initializeCharacterState(chatId, personalityId, framework) {
         // Ensure framework has proper structure
         const defaults = framework?.behavioral_defaults || {
             default_emotional_state: 'neutral',
@@ -415,8 +415,8 @@ Convert to proper JSON format.`;
                 internal_state_notes: `Starting conversation as ${defaults.default_emotional_state || 'neutral'}`
             };
             
-            await dal.psychology.updatePsychologicalState(sessionId, personalityId, currentState);
-            return { sessionId, personalityId };
+            await dal.psychology.updatePsychologicalState(chatId, personalityId, currentState);
+            return { chatId, personalityId };
         } catch (error) {
             this.logger.error('Error initializing character state:', error);
             throw error;
@@ -427,18 +427,18 @@ Convert to proper JSON format.`;
      * DOMAIN LAYER: LLM-powered psychological state analysis and update using character framework
      * Core intelligence for authentic character behavior evolution
      */
-    async analyzeAndUpdateState(sessionId, conversationHistory, currentMessage, personality) {
+    async analyzeAndUpdateState(chatId, conversationHistory, currentMessage, personality) {
         try {
             // Ensure we have the character framework
             const framework = await this.ensurePersonalityFramework(personality);
             
             // Get current state
-            let currentState = await this.getCharacterState(sessionId);
+            let currentState = await this.getCharacterState(chatId);
             
             // Initialize state if it doesn't exist
             if (!currentState) {
-                await this.initializeCharacterState(sessionId, personality.id, framework);
-                currentState = await this.getCharacterState(sessionId);
+                await this.initializeCharacterState(chatId, personality.id, framework);
+                currentState = await this.getCharacterState(chatId);
             }
 
             // Create simplified prompt for better JSON compliance
@@ -518,27 +518,27 @@ How would this naturally affect their internal state? Consider time-of-day facto
             }
             
             // Log the state evolution for analytics
-            await this.logStateEvolution(sessionId, personality.id, currentState, updates, currentMessage, 'structured analysis');
+            await this.logStateEvolution(chatId, personality.id, currentState, updates, currentMessage, 'structured analysis');
             
             // Apply updates to database
-            await this.updateCharacterState(sessionId, updates);
+            await this.updateCharacterState(chatId, updates);
             
             // Weight recent memories based on psychological impact
-            await this.weightRecentMemories(sessionId, conversationHistory, updates, framework);
+            await this.weightRecentMemories(chatId, conversationHistory, updates, framework);
             
-            return await this.getCharacterState(sessionId);
+            return await this.getCharacterState(chatId);
             
         } catch (error) {
             this.logger.error('Error analyzing psychological state:', error);
             // Return current state unchanged on error
-            return await this.getCharacterState(sessionId);
+            return await this.getCharacterState(chatId);
         }
     }
 
     /**
      * INFRASTRUCTURE LAYER: Update character state in database
      */
-    async updateCharacterState(sessionId, updates) {
+    async updateCharacterState(chatId, updates) {
         const allowedFields = [
             'current_emotion', 'emotional_intensity', 'energy_level', 'stress_level',
             'current_motivations', 'relationship_dynamic', 'active_interests', 
@@ -561,7 +561,7 @@ How would this naturally affect their internal state? Consider time-of-day facto
             const dal = this.getDAL();
             
             // Get current state first
-            const currentState = await dal.psychology.getPsychologicalState(sessionId);
+            const currentState = await dal.psychology.getPsychologicalState(chatId);
             if (!currentState) {
                 throw new Error('No psychological state found for session');
             }
@@ -576,7 +576,7 @@ How would this naturally affect their internal state? Consider time-of-day facto
             
             // Update the state
             const result = await dal.psychology.updatePsychologicalState(
-                sessionId, 
+                chatId, 
                 currentState.personality_id, 
                 updatedState
             );
@@ -591,10 +591,10 @@ How would this naturally affect their internal state? Consider time-of-day facto
     /**
      * DOMAIN LAYER: Weight recent memories based on psychological impact
      */
-    async weightRecentMemories(sessionId, conversationHistory, stateUpdates, framework) {
+    async weightRecentMemories(chatId, conversationHistory, stateUpdates, framework) {
         // Filter for user messages that have database IDs
         const recentMessages = conversationHistory.slice(-3)
-            .filter(msg => msg.sender === 'user' && msg.id);
+            .filter(msg => msg.role === 'user' && msg.id);
         
         if (recentMessages.length === 0) {
             this.logger.info('🧠 No database-backed messages found for memory weighting');
@@ -604,7 +604,7 @@ How would this naturally affect their internal state? Consider time-of-day facto
         for (const message of recentMessages) {
             const prompt = `Rate the psychological significance of this message for the character:
 
-Message: "${message.message}"
+Message: "${message.content}"
 Character state changes: ${JSON.stringify(stateUpdates)}
 
 Rate significance (1-10) for:
@@ -659,7 +659,7 @@ Rate significance (1-10) for:
                     weightData = schema.fallback;
                 }
                 
-                await this.saveMemoryWeights(sessionId, message.id, weightData);
+                await this.saveMemoryWeights(chatId, message.id, weightData);
             } catch (error) {
                 this.logger.error('Error weighting memory:', error);
                 // Continue processing other memories even if one fails
@@ -670,11 +670,11 @@ Rate significance (1-10) for:
     /**
      * INFRASTRUCTURE LAYER: Save memory weights to database
      */
-    async saveMemoryWeights(sessionId, messageId, weightData) {
+    async saveMemoryWeights(chatId, messageId, weightData) {
         try {
             const dal = this.getDAL();
-            const result = await dal.conversations.saveMemoryWeight(sessionId, messageId, weightData);
-            this.logger.info(`💾 Saved memory weights for message ${messageId} in session ${sessionId}`);
+            const result = await dal.conversations.saveMemoryWeight(chatId, messageId, weightData);
+            this.logger.info(`💾 Saved memory weights for message ${messageId} in session ${chatId}`);
             return result.id;
         } catch (error) {
             this.logger.error('Error saving memory weights:', error);
@@ -686,15 +686,15 @@ Rate significance (1-10) for:
     /**
      * APPLICATION LAYER: Get psychologically weighted conversation context
      */
-    async getWeightedContext(sessionId, maxMessages = 10) {
+    async getWeightedContext(chatId, maxMessages = 10) {
         const dal = this.getDAL();
-        return await dal.psychology.getConversationContextForPsychology(sessionId, maxMessages);
+        return await dal.psychology.getConversationContextForPsychology(chatId, maxMessages);
     }
 
     /**
      * ANALYTICS LAYER: Log state evolution for learning and improvement
      */
-    async logStateEvolution(sessionId, personalityId, previousState, newUpdates, triggerMessage, reasoning) {
+    async logStateEvolution(chatId, personalityId, previousState, newUpdates, triggerMessage, reasoning) {
         // Calculate evolution metrics
         const emotionalShift = this.calculateEmotionalShift(previousState, newUpdates);
         const motivationStability = this.calculateMotivationStability(previousState, newUpdates);
@@ -712,7 +712,7 @@ Rate significance (1-10) for:
         };
         
         const result = await dal.psychology.logPsychologyEvolution(
-            sessionId, 
+            chatId, 
             personalityId, 
             'conversation_analysis', 
             evolutionData
@@ -801,7 +801,7 @@ Rate significance (1-10) for:
     /**
      * APPLICATION LAYER: Get psychology analytics for monitoring
      */
-    async getPsychologyAnalytics(sessionId = null, timeframe = '24h') {
+    async getPsychologyAnalytics(chatId = null, timeframe = '24h') {
         return await this.withMetrics(async () => {
             const analytics = {
                 global: {
@@ -812,8 +812,8 @@ Rate significance (1-10) for:
             };
             
             // Add session-specific analytics if requested
-            if (sessionId) {
-                const sessionData = await this.getSessionAnalytics(sessionId);
+            if (chatId) {
+                const sessionData = await this.getSessionAnalytics(chatId);
                 analytics.session = sessionData;
             }
             
@@ -824,11 +824,11 @@ Rate significance (1-10) for:
     /**
      * APPLICATION LAYER: Get session-specific psychology analytics
      */
-    async getSessionAnalytics(sessionId) {
-        const currentState = await this.getCharacterState(sessionId);
+    async getSessionAnalytics(chatId) {
+        const currentState = await this.getCharacterState(chatId);
         
         return {
-            sessionId,
+            chatId,
             currentState,
             lastStateUpdate: currentState?.last_updated || null,
             hasActiveState: !!currentState
@@ -862,12 +862,12 @@ Rate significance (1-10) for:
     /**
      * ANALYTICS: Get psychology analytics for a session
      */
-    async getSessionPsychologyAnalytics(sessionId) {
+    async getSessionPsychologyAnalytics(chatId) {
         // Use DAL exclusively - no direct SQL
         try {
             const dal = this.getDAL();
-            const state = await dal.psychology.getPsychologicalState(sessionId);
-            return state ? { sessionId, hasState: true, ...state } : null;
+            const state = await dal.psychology.getPsychologicalState(chatId);
+            return state ? { chatId, hasState: true, ...state } : null;
         } catch (error) {
             this.logger.error('Error getting psychology analytics:', error);
             throw error;
@@ -894,27 +894,27 @@ Rate significance (1-10) for:
     /**
      * CLEAN ARCHITECTURE: Get psychological state
      */
-    async getPsychologicalState(sessionId) {
+    async getPsychologicalState(chatId) {
         return await this.withMetrics(async () => {
             try {
                 // Check active states first
-                if (this.activeStates.has(sessionId)) {
-                    return this.activeStates.get(sessionId);
+                if (this.activeStates.has(chatId)) {
+                    return this.activeStates.get(chatId);
                 }
                 
                 // Get from repository
-                const state = await this.dal.psychology.getCharacterPsychologicalState('', '', sessionId);
+                const state = await this.dal.psychology.getCharacterPsychologicalState('', '', chatId);
                 if (!state) {
                     return null;
                 }
                 
                 // Add to active states
-                this.activeStates.set(sessionId, state);
+                this.activeStates.set(chatId, state);
                 return state;
             } catch (error) {
                 this.logger.error('Error getting psychological state', 'PsychologyService', {
                     error: error.message,
-                    sessionId
+                    chatId
                 });
                 return null;
             }
@@ -924,13 +924,13 @@ Rate significance (1-10) for:
     /**
      * CLEAN ARCHITECTURE: Update psychological state
      */
-    async updatePsychologicalState(sessionId, update) {
+    async updatePsychologicalState(chatId, update) {
         return await this.withMetrics(async () => {
             try {
                 // Get current state
-                let state = await this.getPsychologicalState(sessionId);
+                let state = await this.getPsychologicalState(chatId);
                 if (!state) {
-                    state = await this.createInitialState(sessionId);
+                    state = await this.createInitialState(chatId);
                 }
                 
                 // Apply update
@@ -941,17 +941,17 @@ Rate significance (1-10) for:
                 };
                 
                 // Save to repository
-                await this.dal.psychology.saveCharacterPsychologicalState('', '', sessionId, newState);
+                await this.dal.psychology.saveCharacterPsychologicalState('', '', chatId, newState);
                 
                 // Update active states
-                this.activeStates.set(sessionId, newState);
+                this.activeStates.set(chatId, newState);
                 this.stateAnalytics.stateUpdates++;
                 
                 return newState;
             } catch (error) {
                 this.logger.error('Error updating psychological state', 'PsychologyService', {
                     error: error.message,
-                    sessionId
+                    chatId
                 });
                 return null;
             }
@@ -961,10 +961,10 @@ Rate significance (1-10) for:
     /**
      * CLEAN ARCHITECTURE: Create initial state
      */
-    async createInitialState(sessionId) {
+    async createInitialState(chatId) {
         try {
             const initialState = {
-                sessionId,
+                chatId,
                 createdAt: new Date(),
                 lastUpdated: new Date(),
                 mood: 'neutral',
@@ -976,17 +976,17 @@ Rate significance (1-10) for:
             };
             
             // Save to repository
-            await this.dal.psychology.saveCharacterPsychologicalState('', '', sessionId, initialState);
+            await this.dal.psychology.saveCharacterPsychologicalState('', '', chatId, initialState);
             
             // Update active states
-            this.activeStates.set(sessionId, initialState);
+            this.activeStates.set(chatId, initialState);
             this.stateAnalytics.statesCreated++;
             
             return initialState;
         } catch (error) {
             this.logger.error('Error creating initial psychological state', 'PsychologyService', {
                 error: error.message,
-                sessionId
+                chatId
             });
             return null;
         }
@@ -995,14 +995,14 @@ Rate significance (1-10) for:
     /**
      * CLEAN ARCHITECTURE: Get psychology analytics
      */
-    async getSessionPsychologyAnalytics(sessionId) {
+    async getSessionPsychologyAnalytics(chatId) {
         try {
-            const state = await this.dal.psychology.getCharacterPsychologicalState('', '', sessionId);
-            return state ? { sessionId, hasState: true, ...state } : null;
+            const state = await this.dal.psychology.getCharacterPsychologicalState('', '', chatId);
+            return state ? { chatId, hasState: true, ...state } : null;
         } catch (error) {
             this.logger.error('Error getting psychology analytics', 'PsychologyService', {
                 error: error.message,
-                sessionId
+                chatId
             });
             throw error;
         }
@@ -1018,9 +1018,9 @@ Rate significance (1-10) for:
             const cleared = 0; // Placeholder until repository method is implemented
             
             // Clear from active states
-            for (const [sessionId, state] of this.activeStates.entries()) {
+            for (const [chatId, state] of this.activeStates.entries()) {
                 if (new Date(state.lastUpdated) < cutoffTime) {
-                    this.activeStates.delete(sessionId);
+                    this.activeStates.delete(chatId);
                     this.stateAnalytics.statesDestroyed++;
                 }
             }
@@ -1032,6 +1032,31 @@ Rate significance (1-10) for:
             });
             return 0;
         }
+    }
+
+    /**
+     * ADAPTER METHOD: Bridge for ContextBuilderService compatibility
+     * Maps (userId, chatId, characterId) to chatId-based lookup
+     * @param {string} userId - User ID (not currently used in state lookup)
+     * @param {string} chatId - Chat/Session ID
+     * @param {string} characterId - Character/Personality ID (not currently used in state lookup)
+     * @returns {Promise<Object|null>} Psychology state
+     */
+    async getState(userId, chatId, characterId) {
+        return await this.withMetrics(async () => {
+            try {
+                // chatId IS the chatId in current architecture
+                return await this.getCharacterState(chatId);
+            } catch (error) {
+                this.logger.error('Error in getState adapter', 'PsychologyService', {
+                    error: error.message,
+                    userId,
+                    chatId,
+                    characterId
+                });
+                return null;
+            }
+        }, 'getState');
     }
 
     /**

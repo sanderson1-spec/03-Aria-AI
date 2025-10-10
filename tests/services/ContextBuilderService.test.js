@@ -21,11 +21,11 @@ describe('ContextBuilderService', () => {
         // Add database service mock with DAL
         mockDeps.database = {
             getDAL: jest.fn().mockReturnValue({
-                conversationLogs: {
+                conversations: {
                     getRecentMessages: jest.fn()
                 },
                 memories: {
-                    getTopWeightedMemories: jest.fn()
+                    getWeightedMemories: jest.fn()
                 },
                 commitments: {
                     getActiveCommitments: jest.fn(),
@@ -47,7 +47,7 @@ describe('ContextBuilderService', () => {
 
         // Add psychology mock
         mockDeps.psychology = {
-            getState: jest.fn()
+            getPsychologicalState: jest.fn()
         };
         
         contextBuilderService = new ContextBuilderService(mockDeps);
@@ -63,7 +63,7 @@ describe('ContextBuilderService', () => {
 
         test('should have DAL access', () => {
             expect(contextBuilderService.dal).toBeDefined();
-            expect(contextBuilderService.dal.conversationLogs).toBeDefined();
+            expect(contextBuilderService.dal.conversations).toBeDefined();
             expect(contextBuilderService.dal.memories).toBeDefined();
             expect(contextBuilderService.dal.commitments).toBeDefined();
             expect(contextBuilderService.dal.events).toBeDefined();
@@ -78,7 +78,7 @@ describe('ContextBuilderService', () => {
 
         test('should have psychology dependency', () => {
             expect(contextBuilderService.psychology).toBeDefined();
-            expect(typeof contextBuilderService.psychology.getState).toBe('function');
+            expect(typeof contextBuilderService.psychology.getPsychologicalState).toBe('function');
         });
 
         test('should implement required service interface', () => {
@@ -128,17 +128,17 @@ describe('ContextBuilderService', () => {
 
         beforeEach(() => {
             // Mock all data sources
-            mockDeps.database.getDAL().conversationLogs.getRecentMessages.mockResolvedValue([
+            mockDeps.database.getDAL().conversations.getRecentMessages.mockResolvedValue([
                 { id: 1, role: 'user', content: 'Hello' },
                 { id: 2, role: 'assistant', content: 'Hi there!' }
             ]);
 
-            mockDeps.psychology.getState.mockResolvedValue({
+            mockDeps.psychology.getPsychologicalState.mockResolvedValue({
                 mood: 'happy',
                 openness: 0.8
             });
 
-            mockDeps.database.getDAL().memories.getTopWeightedMemories.mockResolvedValue([
+            mockDeps.database.getDAL().memories.getWeightedMemories.mockResolvedValue([
                 { id: 1, content: 'User likes coffee', weight: 0.9 }
             ]);
 
@@ -180,17 +180,15 @@ describe('ContextBuilderService', () => {
             expect(context.recentCompletions).toBeDefined();
         });
 
-        test('should call psychology.getState with correct parameters', async () => {
+        test('should call psychology.getPsychologicalState with correct parameters', async () => {
             await contextBuilderService.buildUnifiedContext(
                 mockUserId,
                 mockChatId,
                 mockCharacterId
             );
 
-            expect(mockDeps.psychology.getState).toHaveBeenCalledWith(
-                mockUserId,
-                mockChatId,
-                mockCharacterId
+            expect(mockDeps.psychology.getPsychologicalState).toHaveBeenCalledWith(
+                mockChatId
             );
         });
 
@@ -201,8 +199,7 @@ describe('ContextBuilderService', () => {
                 mockCharacterId
             );
 
-            expect(mockDeps.database.getDAL().memories.getTopWeightedMemories).toHaveBeenCalledWith(
-                mockUserId,
+            expect(mockDeps.database.getDAL().memories.getWeightedMemories).toHaveBeenCalledWith(
                 mockChatId,
                 10
             );
@@ -222,8 +219,8 @@ describe('ContextBuilderService', () => {
         });
 
         test('should handle empty data gracefully', async () => {
-            mockDeps.database.getDAL().conversationLogs.getRecentMessages.mockResolvedValue([]);
-            mockDeps.database.getDAL().memories.getTopWeightedMemories.mockResolvedValue([]);
+            mockDeps.database.getDAL().conversations.getRecentMessages.mockResolvedValue([]);
+            mockDeps.database.getDAL().memories.getWeightedMemories.mockResolvedValue([]);
             mockDeps.database.getDAL().commitments.getActiveCommitments.mockResolvedValue([]);
             mockDeps.database.getDAL().events.getUpcomingEvents.mockResolvedValue([]);
 
@@ -248,35 +245,35 @@ describe('ContextBuilderService', () => {
                 { id: 1, role: 'user', content: 'Message 1' },
                 { id: 2, role: 'assistant', content: 'Response 1' }
             ];
-            mockDeps.database.getDAL().conversationLogs.getRecentMessages.mockResolvedValue(mockMessages);
+            mockDeps.database.getDAL().conversations.getRecentMessages.mockResolvedValue(mockMessages);
 
             const messages = await contextBuilderService.getRecentMessages(mockChatId, 30);
 
             expect(messages).toEqual(mockMessages);
-            expect(mockDeps.database.getDAL().conversationLogs.getRecentMessages).toHaveBeenCalledWith(
+            expect(mockDeps.database.getDAL().conversations.getRecentMessages).toHaveBeenCalledWith(
                 mockChatId,
                 30
             );
         });
 
         test('should handle different window sizes', async () => {
-            mockDeps.database.getDAL().conversationLogs.getRecentMessages.mockResolvedValue([]);
+            mockDeps.database.getDAL().conversations.getRecentMessages.mockResolvedValue([]);
 
             await contextBuilderService.getRecentMessages(mockChatId, 50);
-            expect(mockDeps.database.getDAL().conversationLogs.getRecentMessages).toHaveBeenCalledWith(
+            expect(mockDeps.database.getDAL().conversations.getRecentMessages).toHaveBeenCalledWith(
                 mockChatId,
                 50
             );
 
             await contextBuilderService.getRecentMessages(mockChatId, 10);
-            expect(mockDeps.database.getDAL().conversationLogs.getRecentMessages).toHaveBeenCalledWith(
+            expect(mockDeps.database.getDAL().conversations.getRecentMessages).toHaveBeenCalledWith(
                 mockChatId,
                 10
             );
         });
 
         test('should handle empty message history', async () => {
-            mockDeps.database.getDAL().conversationLogs.getRecentMessages.mockResolvedValue([]);
+            mockDeps.database.getDAL().conversations.getRecentMessages.mockResolvedValue([]);
 
             const messages = await contextBuilderService.getRecentMessages(mockChatId, 30);
 
@@ -400,11 +397,11 @@ describe('ContextBuilderService', () => {
             const mockPromise = (data, delay = 10) => 
                 new Promise(resolve => setTimeout(() => resolve(data), delay));
 
-            mockDeps.database.getDAL().conversationLogs.getRecentMessages.mockReturnValue(
+            mockDeps.database.getDAL().conversations.getRecentMessages.mockReturnValue(
                 mockPromise([{ id: 1 }])
             );
-            mockDeps.psychology.getState.mockReturnValue(mockPromise({ mood: 'happy' }));
-            mockDeps.database.getDAL().memories.getTopWeightedMemories.mockReturnValue(
+            mockDeps.psychology.getPsychologicalState.mockReturnValue(mockPromise({ mood: 'happy' }));
+            mockDeps.database.getDAL().memories.getWeightedMemories.mockReturnValue(
                 mockPromise([{ id: 1 }])
             );
             mockDeps.database.getDAL().commitments.getActiveCommitments.mockReturnValue(
@@ -432,9 +429,9 @@ describe('ContextBuilderService', () => {
         });
 
         test('should complete all fetches even if some are slower', async () => {
-            mockDeps.database.getDAL().conversationLogs.getRecentMessages.mockResolvedValue([{ id: 1 }]);
-            mockDeps.psychology.getState.mockResolvedValue({ mood: 'happy' });
-            mockDeps.database.getDAL().memories.getTopWeightedMemories.mockImplementation(
+            mockDeps.database.getDAL().conversations.getRecentMessages.mockResolvedValue([{ id: 1 }]);
+            mockDeps.psychology.getPsychologicalState.mockResolvedValue({ mood: 'happy' });
+            mockDeps.database.getDAL().memories.getWeightedMemories.mockImplementation(
                 () => new Promise(resolve => setTimeout(() => resolve([{ id: 1 }]), 50))
             );
             mockDeps.database.getDAL().commitments.getActiveCommitments.mockResolvedValue([{ id: 1 }]);
@@ -467,7 +464,7 @@ describe('ContextBuilderService', () => {
             mockDeps.llmConfig.getGlobalConfig.mockResolvedValue({ context_window_messages: 30 });
             
             // Setup the database error
-            mockDeps.database.getDAL().conversationLogs.getRecentMessages.mockRejectedValue(
+            mockDeps.database.getDAL().conversations.getRecentMessages.mockRejectedValue(
                 new Error('Database connection failed')
             );
 
@@ -481,9 +478,9 @@ describe('ContextBuilderService', () => {
         });
 
         test('should handle psychology service errors', async () => {
-            mockDeps.database.getDAL().conversationLogs.getRecentMessages.mockResolvedValue([]);
-            mockDeps.psychology.getState.mockRejectedValue(new Error('Psychology state not found'));
-            mockDeps.database.getDAL().memories.getTopWeightedMemories.mockResolvedValue([]);
+            mockDeps.database.getDAL().conversations.getRecentMessages.mockResolvedValue([]);
+            mockDeps.psychology.getPsychologicalState.mockRejectedValue(new Error('Psychology state not found'));
+            mockDeps.database.getDAL().memories.getWeightedMemories.mockResolvedValue([]);
             mockDeps.database.getDAL().commitments.getActiveCommitments.mockResolvedValue([]);
             mockDeps.database.getDAL().events.getUpcomingEvents.mockResolvedValue([]);
             mockDeps.llmConfig.getCharacterPreferences.mockResolvedValue(null);
@@ -516,7 +513,7 @@ describe('ContextBuilderService', () => {
         });
 
         test('should wrap errors with proper context', async () => {
-            mockDeps.database.getDAL().conversationLogs.getRecentMessages.mockRejectedValue(
+            mockDeps.database.getDAL().conversations.getRecentMessages.mockRejectedValue(
                 new Error('Query failed')
             );
 

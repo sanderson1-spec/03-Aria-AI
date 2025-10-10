@@ -7,12 +7,14 @@ interface MessageListProps {
   messages: Message[];
   isTyping: boolean;
   characterName: string;
+  characterAvatar?: string;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
   messages,
   isTyping,
   characterName,
+  characterAvatar,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -40,11 +42,19 @@ export const MessageList: React.FC<MessageListProps> = ({
       ) : (
         <>
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageBubble 
+              key={message.id} 
+              message={message} 
+              characterAvatar={characterAvatar}
+              characterName={characterName}
+            />
           ))}
           
           {isTyping && (
-            <TypingIndicator characterName={characterName} />
+            <TypingIndicator 
+              characterName={characterName} 
+              characterAvatar={characterAvatar}
+            />
           )}
         </>
       )}
