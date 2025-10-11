@@ -23,13 +23,15 @@ class MemorySearchService extends AbstractService {
      * Analyze user message to determine if deep memory search is needed
      * @param {string} userMessage - The current user message
      * @param {Array} recentContext - Recent messages for context (last 5)
+     * @param {number} userId - User ID for LLM configuration resolution
      * @returns {Promise<Object>} Search intent analysis
      */
-    async analyzeSearchIntent(userMessage, recentContext) {
+    async analyzeSearchIntent(userMessage, recentContext, userId) {
         try {
             this.logger.debug('Analyzing search intent', 'MemorySearchService', {
                 messageLength: userMessage.length,
-                contextSize: recentContext.length
+                contextSize: recentContext.length,
+                userId
             });
 
             const recentContextText = recentContext
@@ -68,11 +70,14 @@ Respond with JSON:
                 required: ['needs_search', 'reasoning']
             };
 
+            this.logger.debug('Using analytical model for search intent analysis', 'MemorySearchService', { userId });
+
             const searchIntent = await this.structuredResponse.generateStructuredResponse(
                 prompt,
                 schema,
                 {
-                    model: 'qwen',
+                    userId: userId,
+                    role: 'analytical',
                     temperature: 0.1,
                     maxTokens: 200
                 }
@@ -133,13 +138,15 @@ Respond with JSON:
      * Filter memories for relevance using LLM-based semantic analysis
      * @param {Array} memories - Candidate memories to filter
      * @param {string} searchQuery - Semantic search query
+     * @param {number} userId - User ID for LLM configuration resolution
      * @returns {Promise<Array>} Filtered relevant memories (5-10 most relevant)
      */
-    async filterRelevantMemories(memories, searchQuery) {
+    async filterRelevantMemories(memories, searchQuery, userId) {
         try {
             this.logger.debug('Filtering relevant memories', 'MemorySearchService', {
                 candidateCount: memories.length,
-                searchQuery
+                searchQuery,
+                userId
             });
 
             if (memories.length === 0) {
@@ -176,11 +183,14 @@ Respond with JSON:
                 required: ['relevant_indices', 'reasoning']
             };
 
+            this.logger.debug('Using analytical model for memory filtering', 'MemorySearchService', { userId });
+
             const filterResult = await this.structuredResponse.generateStructuredResponse(
                 prompt,
                 schema,
                 {
-                    model: 'qwen',
+                    userId: userId,
+                    role: 'analytical',
                     temperature: 0.1,
                     maxTokens: 300
                 }
@@ -214,21 +224,23 @@ Respond with JSON:
      * @param {string} userMessage - Current user message
      * @param {Array<number>} recentMessageIds - Message IDs to exclude from search
      * @param {number} significanceThreshold - Minimum significance score
+     * @param {number} userId - User ID for LLM configuration resolution
      * @returns {Promise<Array|null>} Relevant memories or null if search not needed
      */
-    async executeDeepSearch(chatId, userMessage, recentMessageIds, significanceThreshold) {
+    async executeDeepSearch(chatId, userMessage, recentMessageIds, significanceThreshold, userId) {
         try {
             this.logger.debug('Executing deep search', 'MemorySearchService', {
                 chatId,
                 recentMessageCount: recentMessageIds.length,
-                threshold: significanceThreshold
+                threshold: significanceThreshold,
+                userId
             });
 
             // Get recent messages for context
             const recentMessages = await this.dal.conversations.getMessagesByIds(recentMessageIds);
 
             // Step 1: Analyze search intent
-            const searchIntent = await this.analyzeSearchIntent(userMessage, recentMessages);
+            const searchIntent = await this.analyzeSearchIntent(userMessage, recentMessages, userId);
 
             if (!searchIntent.needs_search) {
                 this.logger.debug('Search not needed', 'MemorySearchService', {
@@ -254,10 +266,11 @@ Respond with JSON:
                 return [];
             }
 
-            // Step 3: Filter for relevance
+            // Step 3: Filter for relevance (using analytical model)
             const relevantMemories = await this.filterRelevantMemories(
                 candidateMemories,
-                searchIntent.search_query
+                searchIntent.search_query,
+                userId
             );
 
             this.logger.info('Deep search completed', 'MemorySearchService', {

@@ -71,9 +71,25 @@ class UserRepository extends BaseRepository {
                 updated_at: new Date().toISOString()
             };
             
-            return await this.update(userId, updates);
+            return await this.update(updates, { id: userId });
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to update user preferences', { userId, preferences });
+        }
+    }
+
+    /**
+     * DOMAIN LAYER: Update user LLM preferences
+     */
+    async updateLLMPreferences(userId, llmPreferences) {
+        try {
+            const updates = {
+                llm_preferences: JSON.stringify(llmPreferences),
+                updated_at: new Date().toISOString()
+            };
+            
+            return await this.update(updates, { id: userId });
+        } catch (error) {
+            throw this.errorHandler.wrapRepositoryError(error, 'Failed to update user LLM preferences', { userId, llmPreferences });
         }
     }
 
@@ -86,7 +102,7 @@ class UserRepository extends BaseRepository {
                 last_active: new Date().toISOString()
             };
             
-            return await this.update(userId, updates);
+            return await this.update(updates, { id: userId });
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to update last active', { userId });
         }
@@ -146,7 +162,7 @@ class UserRepository extends BaseRepository {
                 updated_at: new Date().toISOString()
             };
             
-            return await this.update(userId, updates);
+            return await this.update(updates, { id: userId });
         } catch (error) {
             throw this.errorHandler.wrapRepositoryError(error, 'Failed to deactivate user', { userId });
         }

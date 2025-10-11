@@ -77,6 +77,7 @@ class LLMService extends AbstractService {
 
     /**
      * CLEAN ARCHITECTURE: Load configuration from settings service
+     * Note: Model selection is now handled by LLMConfigService cascade per-request
      */
     async loadConfiguration() {
         try {
@@ -84,10 +85,10 @@ class LLMService extends AbstractService {
             const configData = this.configuration.getAllConfiguration ? this.configuration.getAllConfiguration() : {};
             const llmConfig = configData?.llm || {};
             
-            // Fallback to environment variables if no configuration service data
+            // Load endpoint and operational settings (NOT model - that's resolved per-request)
             this.config = {
                 endpoint: llmConfig.endpoint || process.env.LLM_ENDPOINT || 'http://localhost:1234/v1/chat/completions',
-                model: llmConfig.model || process.env.LLM_MODEL || 'meta-llama-3.1-8b-instruct', // Default to a working model
+                model: null, // Will be resolved per-request via LLMConfigService cascade
                 temperature: llmConfig.temperature || parseFloat(process.env.LLM_TEMPERATURE) || 0.7,
                 maxTokens: llmConfig.maxTokens || parseInt(process.env.LLM_MAX_TOKENS) || 2048,
                 timeout: parseInt(process.env.LLM_TIMEOUT) || 30000,
@@ -97,7 +98,11 @@ class LLMService extends AbstractService {
             // Update rate limit configuration
             this.rateLimitConfig.requestsPerMinute = this.config.rateLimitRpm;
             
-            this.logger.debug('LLM configuration loaded', 'LLM', this.config);
+            this.logger.info('LLM service configuration loaded', 'LLM', {
+                endpoint: this.config.endpoint,
+                modelSelection: 'per-request via LLMConfigService cascade',
+                timeout: this.config.timeout
+            });
             
         } catch (error) {
             this.logger.warn('Failed to load configuration from service, using defaults', 'LLM', { error: error.message });
@@ -105,7 +110,7 @@ class LLMService extends AbstractService {
             // Fallback configuration if configuration service fails
             this.config = {
                 endpoint: process.env.LLM_ENDPOINT || 'http://localhost:1234/v1/chat/completions',
-                model: process.env.LLM_MODEL || 'meta-llama-3.1-8b-instruct',
+                model: null, // Will be resolved per-request
                 temperature: parseFloat(process.env.LLM_TEMPERATURE) || 0.7,
                 maxTokens: parseInt(process.env.LLM_MAX_TOKENS) || 2048,
                 timeout: parseInt(process.env.LLM_TIMEOUT) || 30000,
@@ -274,9 +279,10 @@ class LLMService extends AbstractService {
         
         // Resolve model configuration with cascade: character → user → global
         let resolvedConfig = null;
-        let model = this.config.model;
+        let model = null;
         let temperature = options?.temperature || this.config?.temperature || 0.7;
         let maxTokens = options?.maxTokens || this.config?.maxTokens || 2048;
+        let configSource = 'unknown';
         
         // Determine role based on options (default to conversational)
         const role = options?.role || 'conversational';
@@ -290,25 +296,60 @@ class LLMService extends AbstractService {
                     role
                 );
                 
-                if (resolvedConfig) {
-                    // Use resolved config values, falling back to defaults
-                    model = resolvedConfig.model || model;
+                if (resolvedConfig && resolvedConfig.model) {
+                    // Use resolved config values from cascade
+                    model = resolvedConfig.model;
                     temperature = resolvedConfig.temperature !== undefined ? resolvedConfig.temperature : temperature;
                     maxTokens = resolvedConfig.max_tokens !== undefined ? resolvedConfig.max_tokens : maxTokens;
                     
-                    this.logger.debug('Using resolved model config for streaming', 'LLM', { 
+                    // Determine configuration source for logging
+                    if (options.characterId) {
+                        configSource = 'character-specific';
+                    } else {
+                        configSource = 'user-default';
+                    }
+                    
+                    this.logger.info('✅ Model resolved via LLMConfigService cascade', 'LLM', { 
                         model, 
                         role,
+                        source: configSource,
                         userId: options.userId,
-                        characterId: options.characterId
+                        characterId: options.characterId,
+                        temperature,
+                        maxTokens
+                    });
+                } else {
+                    this.logger.warn('⚠️ LLMConfigService returned null - check database configuration', 'LLM', {
+                        userId: options.userId,
+                        characterId: options.characterId,
+                        role
                     });
                 }
             } catch (error) {
-                // Log warning but continue with defaults (backward compatibility)
-                this.logger.warn('Failed to resolve model config for streaming, using defaults', 'LLM', { 
-                    error: error.message 
+                this.logger.error('❌ Failed to resolve model config for streaming', 'LLM', { 
+                    error: error.message,
+                    userId: options.userId,
+                    characterId: options.characterId,
+                    role
                 });
             }
+        } else {
+            this.logger.warn('⚠️ Model resolution skipped - missing LLMConfigService or user context', 'LLM', {
+                hasLLMConfig: !!this.llmConfig,
+                hasUserId: !!options?.userId,
+                hasCharacterId: !!options?.characterId
+            });
+        }
+        
+        // Final validation - model MUST be set
+        if (!model) {
+            const errorMsg = 'No model configured. Please set global LLM configuration in database.';
+            this.logger.error('❌ CRITICAL: No model available for streaming request', 'LLM', {
+                userId: options?.userId,
+                characterId: options?.characterId,
+                role
+            });
+            throw new Error(errorMsg);
         }
         
         // Get server type from configuration
@@ -626,9 +667,10 @@ class LLMService extends AbstractService {
         
         // Resolve model configuration with cascade: character → user → global
         let resolvedConfig = null;
-        let model = this.config.model;
+        let model = null;
         let temperature = request.options?.temperature || this.config?.temperature || 0.7;
         let maxTokens = request.options?.maxTokens || this.config?.maxTokens || 2048;
+        let configSource = 'unknown';
         
         // Determine role based on request options (default to conversational)
         const role = request.options?.role || 'conversational';
@@ -642,25 +684,60 @@ class LLMService extends AbstractService {
                     role
                 );
                 
-                if (resolvedConfig) {
-                    // Use resolved config values, falling back to defaults
-                    model = resolvedConfig.model || model;
+                if (resolvedConfig && resolvedConfig.model) {
+                    // Use resolved config values from cascade
+                    model = resolvedConfig.model;
                     temperature = resolvedConfig.temperature !== undefined ? resolvedConfig.temperature : temperature;
                     maxTokens = resolvedConfig.max_tokens !== undefined ? resolvedConfig.max_tokens : maxTokens;
                     
-                    this.logger.debug('Using resolved model config', 'LLM', { 
+                    // Determine configuration source for logging
+                    if (request.options.characterId) {
+                        configSource = 'character-specific';
+                    } else {
+                        configSource = 'user-default';
+                    }
+                    
+                    this.logger.info('✅ Model resolved via LLMConfigService cascade', 'LLM', { 
                         model, 
                         role,
+                        source: configSource,
                         userId: request.options.userId,
-                        characterId: request.options.characterId
+                        characterId: request.options.characterId,
+                        temperature,
+                        maxTokens
+                    });
+                } else {
+                    this.logger.warn('⚠️ LLMConfigService returned null - check database configuration', 'LLM', {
+                        userId: request.options.userId,
+                        characterId: request.options.characterId,
+                        role
                     });
                 }
             } catch (error) {
-                // Log warning but continue with defaults (backward compatibility)
-                this.logger.warn('Failed to resolve model config, using defaults', 'LLM', { 
-                    error: error.message 
+                this.logger.error('❌ Failed to resolve model config', 'LLM', { 
+                    error: error.message,
+                    userId: request.options?.userId,
+                    characterId: request.options?.characterId,
+                    role
                 });
             }
+        } else {
+            this.logger.warn('⚠️ Model resolution skipped - missing LLMConfigService or user context', 'LLM', {
+                hasLLMConfig: !!this.llmConfig,
+                hasUserId: !!request.options?.userId,
+                hasCharacterId: !!request.options?.characterId
+            });
+        }
+        
+        // Final validation - model MUST be set
+        if (!model) {
+            const errorMsg = 'No model configured. Please set global LLM configuration in database.';
+            this.logger.error('❌ CRITICAL: No model available for request', 'LLM', {
+                userId: request.options?.userId,
+                characterId: request.options?.characterId,
+                role
+            });
+            throw new Error(errorMsg);
         }
         
         // Get server type from configuration

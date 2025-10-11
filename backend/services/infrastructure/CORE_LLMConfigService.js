@@ -37,51 +37,87 @@ class CORE_LLMConfigService extends AbstractService {
             
             if (role === 'conversational') {
                 // Conversational cascade: character → user → global
+                this.logger.debug('🔍 Starting conversational model cascade resolution', 'LLMConfig', { userId, characterId, role });
+                
                 if (characterId) {
                     const charPrefs = await this.getCharacterLLMPreferences(characterId);
-                    if (charPrefs && charPrefs.conversational) {
-                        this.logger.debug('Resolved conversational model from character preferences', 'LLMConfig', { userId, characterId });
+                    if (charPrefs && charPrefs.conversational && charPrefs.conversational.model) {
+                        this.logger.info('✅ Resolved from CHARACTER preferences', 'LLMConfig', { 
+                            userId, 
+                            characterId,
+                            model: charPrefs.conversational.model,
+                            source: 'character-specific',
+                            cascadeLevel: 1
+                        });
                         // Add context_window_messages if not present
                         return {
                             ...charPrefs.conversational,
                             context_window_messages: charPrefs.conversational.context_window_messages || globalContextWindow
                         };
+                    } else {
+                        this.logger.debug('⬇️ Character has no conversational LLM override, checking user defaults', 'LLMConfig', { characterId });
                     }
                 }
                 
                 // Check user default
                 const userPrefs = await this.getUserLLMPreferences(userId);
-                if (userPrefs && userPrefs.conversational) {
-                    this.logger.debug('Resolved conversational model from user preferences', 'LLMConfig', { userId });
+                if (userPrefs && userPrefs.conversational && userPrefs.conversational.model) {
+                    this.logger.info('✅ Resolved from USER preferences', 'LLMConfig', { 
+                        userId,
+                        model: userPrefs.conversational.model,
+                        source: 'user-default',
+                        cascadeLevel: 2
+                    });
                     // Add context_window_messages if not present
                     return {
                         ...userPrefs.conversational,
                         context_window_messages: userPrefs.conversational.context_window_messages || globalContextWindow
                     };
+                } else {
+                    this.logger.debug('⬇️ User has no conversational LLM preferences, using global defaults', 'LLMConfig', { userId });
                 }
                 
                 // Fall back to global default
                 const globalConfig = await this.getGlobalLLMConfig(role);
-                this.logger.debug('Resolved conversational model from global config', 'LLMConfig', { userId });
+                this.logger.info('✅ Resolved from GLOBAL configuration', 'LLMConfig', { 
+                    userId,
+                    model: globalConfig?.model,
+                    source: 'global-default',
+                    cascadeLevel: 3
+                });
                 return {
                     ...globalConfig,
                     context_window_messages: globalConfig.context_window_messages || globalContextWindow
                 };
             } else {
                 // Analytical cascade: user → global (no character override)
+                this.logger.debug('🔍 Starting analytical model cascade resolution', 'LLMConfig', { userId, role });
+                
                 const userPrefs = await this.getUserLLMPreferences(userId);
-                if (userPrefs && userPrefs.analytical) {
-                    this.logger.debug('Resolved analytical model from user preferences', 'LLMConfig', { userId });
+                if (userPrefs && userPrefs.analytical && userPrefs.analytical.model) {
+                    this.logger.info('✅ Resolved from USER preferences (analytical)', 'LLMConfig', { 
+                        userId,
+                        model: userPrefs.analytical.model,
+                        source: 'user-default',
+                        cascadeLevel: 1
+                    });
                     // Add context_window_messages if not present
                     return {
                         ...userPrefs.analytical,
                         context_window_messages: userPrefs.analytical.context_window_messages || globalContextWindow
                     };
+                } else {
+                    this.logger.debug('⬇️ User has no analytical LLM preferences, using global defaults', 'LLMConfig', { userId });
                 }
                 
                 // Fall back to global default
                 const globalConfig = await this.getGlobalLLMConfig(role);
-                this.logger.debug('Resolved analytical model from global config', 'LLMConfig', { userId });
+                this.logger.info('✅ Resolved from GLOBAL configuration (analytical)', 'LLMConfig', { 
+                    userId,
+                    model: globalConfig?.model,
+                    source: 'global-default',
+                    cascadeLevel: 2
+                });
                 return {
                     ...globalConfig,
                     context_window_messages: globalConfig.context_window_messages || globalContextWindow

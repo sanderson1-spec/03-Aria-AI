@@ -80,7 +80,7 @@ class LLMSettingsRoutes {
 
                 // Get user preferences if userId provided
                 if (userId) {
-                    const userPreferences = await llmConfigService.getUserLLMPreferences(parseInt(userId));
+                    const userPreferences = await llmConfigService.getUserLLMPreferences(userId);
                     responseData.user = userPreferences;
                 }
 
@@ -166,7 +166,7 @@ class LLMSettingsRoutes {
                     });
                 }
 
-                await llmConfigService.setUserLLMPreferences(parseInt(userId), preferences);
+                await llmConfigService.setUserLLMPreferences(userId, preferences);
 
                 res.json({
                     success: true,
@@ -208,7 +208,7 @@ class LLMSettingsRoutes {
                     });
                 }
 
-                await llmConfigService.setCharacterLLMPreferences(parseInt(characterId), preferences);
+                await llmConfigService.setCharacterLLMPreferences(characterId, preferences);
 
                 res.json({
                     success: true,
@@ -287,7 +287,7 @@ class LLMSettingsRoutes {
                     });
                 }
 
-                const preferences = await llmConfigService.getCharacterLLMPreferences(parseInt(characterId));
+                const preferences = await llmConfigService.getCharacterLLMPreferences(characterId);
 
                 res.json({
                     success: true,
