@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../../config/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Model {
   id: string;
@@ -24,6 +25,7 @@ interface Settings {
 }
 
 const SettingsPage: React.FC = () => {
+  const { user } = useAuth();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [models, setModels] = useState<Model[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,17 +88,24 @@ const SettingsPage: React.FC = () => {
   const saveSettings = async () => {
     if (!settings) return;
     
+    if (!user?.id) {
+      setMessage({ type: 'error', text: 'User not authenticated' });
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
     
     try {
+      console.log('🔍 SETTINGS PAGE - SAVING WITH USER ID:', user.id, 'USERNAME:', user.username);
+      
       const response = await fetch(`${API_BASE_URL}/api/llm/config/user`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: 'user-1', // Default user
+          userId: user.id,
           preferences: {
             conversational: {
               model: settings.llm.model,

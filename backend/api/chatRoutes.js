@@ -323,7 +323,8 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                     actualSessionId, 
                     message, 
                     recentMessageIds, 
-                    significanceThreshold
+                    significanceThreshold,
+                    userId
                 );
 
                 // Prepare comprehensive context for LLM
@@ -344,7 +345,11 @@ Stay in character as ${character.name}. You have complete awareness of all this 
 
                 // Generate AI response using LLM service (convert to string format)
                 const fullPrompt = `${systemPrompt}\n\nUser: ${message}\n${character.name}:`;
-                const aiResponse = await llmService.generateResponse(fullPrompt);
+                const aiResponse = await llmService.generateResponse(fullPrompt, [], {
+                    userId: userId,
+                    characterId: characterId,
+                    role: 'conversational'
+                });
 
                 // Save AI response to database
                 const aiMessageId = await databaseService.getDAL().conversations.saveMessage(
@@ -546,7 +551,8 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                         actualSessionId, 
                         message, 
                         recentMessageIds, 
-                        significanceThreshold
+                        significanceThreshold,
+                        userId
                     );
                 } catch (contextError) {
                     // Fallback to minimal context if full context fails
@@ -596,7 +602,11 @@ Stay in character as ${character.name}. You have complete awareness of all this 
                 await llmService.generateStreamingResponse(
                     fullPrompt,
                     [], // context
-                    {}, // options
+                    {
+                        userId: userId,
+                        characterId: characterId,
+                        role: 'conversational'
+                    },
                     (chunk, fullContent) => {
                         // Stream each chunk to the frontend
                         res.write(`data: ${JSON.stringify({

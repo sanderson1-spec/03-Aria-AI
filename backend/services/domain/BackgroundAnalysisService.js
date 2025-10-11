@@ -94,7 +94,7 @@ class BackgroundAnalysisService extends AbstractService {
 
             // Run all background analyses concurrently (non-blocking)
             const analysisPromises = [
-                this._runPsychologyAnalysis(chatId, conversationHistory, userMessage, character),
+                this._runPsychologyAnalysis(chatId, userId, conversationHistory, userMessage, character),
                 this._runConversationAnalysis(conversationHistory, userMessage),
                 this._runProactiveAnalysis(chatId, userId, characterId, userMessage, aiResponse, psychologyState, character, conversationHistory),
                 this._runLearningExtraction(chatId, userId, characterId, userMessage, aiResponse)
@@ -117,9 +117,9 @@ class BackgroundAnalysisService extends AbstractService {
     /**
      * Run psychology analysis and state updates
      */
-    async _runPsychologyAnalysis(chatId, conversationHistory, userMessage, character) {
+    async _runPsychologyAnalysis(chatId, userId, conversationHistory, userMessage, character) {
         try {
-            await this.psychology.analyzeAndUpdateState(chatId, conversationHistory, userMessage, character);
+            await this.psychology.analyzeAndUpdateState(chatId, userId, conversationHistory, userMessage, character);
         } catch (error) {
             this.logger.error('Psychology analysis failed', 'BackgroundAnalysisService', { 
                 chatId, 

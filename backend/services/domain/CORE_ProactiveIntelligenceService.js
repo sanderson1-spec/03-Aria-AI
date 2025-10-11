@@ -95,10 +95,12 @@ class ProactiveIntelligenceService extends AbstractService {
             // Get schema
             const proactiveSchema = this.getProactiveAnalysisSchema();
             
-            // Call LLM
+            // Call LLM with userId for proper model resolution
             this.logger.info('Calling StructuredResponse service', 'ProactiveIntelligence');
             const rawDecision = await this.structuredResponse.generateStructuredResponse(
                 prompt, proactiveSchema, {
+                    userId: analysisContext.sessionContext?.userId,
+                    role: 'analytical',
                     temperature: this.config.temperature,
                     maxTokens: this.config.maxTokens,
                     timeout: this.config.analysisTimeout
@@ -615,12 +617,14 @@ IMPORTANT: Interpret these states through the lens of YOUR unique personality fr
             // Get commitment schema
             const commitmentSchema = this.getCommitmentDetectionSchema();
             
-            // Call LLM2 via structured response
+            // Call LLM2 via structured response with userId for proper model resolution
             this.logger.debug('Calling LLM for commitment detection', 'ProactiveIntelligence');
             const rawCommitment = await this.structuredResponse.generateStructuredResponse(
                 prompt, 
                 commitmentSchema, 
                 {
+                    userId: context.sessionContext?.userId,
+                    role: 'analytical',
                     temperature: 0.3, // Lower temperature for more precise detection
                     maxTokens: 800,
                     timeout: this.config.analysisTimeout
@@ -842,12 +846,14 @@ Respond with complete JSON following the schema.`;
             // Get event schema
             const eventSchema = this.getEventDetectionSchema();
             
-            // Call LLM2 via structured response
+            // Call LLM2 via structured response with userId for proper model resolution
             this.logger.debug('Calling LLM for event detection', 'ProactiveIntelligence');
             const rawEvent = await this.structuredResponse.generateStructuredResponse(
                 prompt, 
                 eventSchema, 
                 {
+                    userId: context.sessionContext?.userId,
+                    role: 'analytical',
                     temperature: 0.3, // Lower temperature for more precise detection
                     maxTokens: 800,
                     timeout: this.config.analysisTimeout
@@ -1090,12 +1096,14 @@ Respond with strict JSON matching the schema.`;
             // Get schema
             const reminderSchema = this.getEventReminderSchema();
 
-            // Call LLM
+            // Call LLM with userId for proper model resolution
             this.logger.debug('Calling LLM for event reminder decision', 'ProactiveIntelligence');
             const rawDecision = await this.structuredResponse.generateStructuredResponse(
                 prompt,
                 reminderSchema,
                 {
+                    userId: userId,
+                    role: 'analytical',
                     temperature: 0.7, // Higher temperature for personality-driven decisions
                     maxTokens: 600,
                     timeout: this.config.analysisTimeout
@@ -1212,12 +1220,14 @@ Respond with JSON:
             // Get schema
             const missedEventSchema = this.getMissedEventSchema();
 
-            // Call LLM
+            // Call LLM with userId for proper model resolution
             this.logger.debug('Calling LLM for missed event check', 'ProactiveIntelligence');
             const rawDecision = await this.structuredResponse.generateStructuredResponse(
                 prompt,
                 missedEventSchema,
                 {
+                    userId: userId,
+                    role: 'analytical',
                     temperature: 0.7, // Higher temperature for personality-driven decisions
                     maxTokens: 500,
                     timeout: this.config.analysisTimeout

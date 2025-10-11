@@ -79,7 +79,11 @@ class StructuredResponseService extends AbstractService {
                 temperature: options.temperature || 0.1,
                 maxTokens: options.maxTokens || 1500,
                 retries: options.retries || 2,
-                fallbackToConversational: options.fallbackToConversational !== false
+                fallbackToConversational: options.fallbackToConversational !== false,
+                // Pass through LLM configuration options for model resolution
+                userId: options.userId,
+                characterId: options.characterId,
+                role: options.role || 'analytical'  // Default to analytical for structured responses
             };
 
             // Enhanced prompt with stricter instructions
@@ -150,10 +154,13 @@ class StructuredResponseService extends AbstractService {
         try {
             this.logger.debug(`Attempting ${attemptType} structured response`, 'StructuredResponse');
             
-            // Use centralized LLM service
+            // Use centralized LLM service - pass through all config options including userId/role
             const response = await this.llm.generateResponse(prompt, [], {
                 temperature: config.temperature,
-                maxTokens: config.maxTokens
+                maxTokens: config.maxTokens,
+                userId: config.userId,
+                characterId: config.characterId,
+                role: config.role
             });
             
             if (!response || !response.content) {

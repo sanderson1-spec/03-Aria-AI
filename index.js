@@ -269,7 +269,7 @@ async function runCompleteApplication() {
         process.env.SKIP_LLM_CONNECTION_TEST = 'false';
         process.env.LOG_LEVEL = 'debug';
         process.env.LLM_ENDPOINT = 'http://192.168.178.182:1234/v1/chat/completions';
-        process.env.LLM_MODEL = 'meta-llama-3.1-8b-instruct';
+        // LLM_MODEL intentionally NOT set - use database configuration (character → user → global cascade)
     }
     
     // Override command line arguments

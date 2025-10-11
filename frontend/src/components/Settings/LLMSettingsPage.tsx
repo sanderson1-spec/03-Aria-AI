@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface LLMModel {
   id: string;
@@ -26,6 +27,7 @@ interface GlobalConfig {
 }
 
 const LLMSettingsPage: React.FC = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -48,25 +50,39 @@ const LLMSettingsPage: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   useEffect(() => {
-    loadConfiguration();
-    loadAvailableModels();
-  }, []);
+    if (user?.id) {
+      loadConfiguration();
+      loadAvailableModels();
+    }
+  }, [user?.id]);
 
   const loadConfiguration = async () => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+    
     try {
-      const response = await fetch('http://localhost:3001/api/llm/config');
+      console.log('📥 LOADING CONFIG for user:', user.id, user.username);
+      const response = await fetch(`http://localhost:3001/api/llm/config?userId=${user.id}`);
       const data = await response.json();
+      console.log('📥 API Response:', JSON.stringify(data, null, 2));
       
       if (data.success) {
         const config: { global: GlobalConfig; user?: LLMConfig } = data.data;
+        console.log('📥 Parsed config:', { hasUser: !!config.user, hasGlobal: !!config.global });
+        console.log('📥 User config:', config.user);
+        console.log('📥 Global config:', config.global);
         
         // Load conversational settings
         if (config.user?.conversational) {
+          console.log('✅ Loading USER conversational settings:', config.user.conversational);
           setConversationalModel(config.user.conversational.model || '');
           setConversationalTemp(config.user.conversational.temperature ?? 0.7);
           setConversationalMaxTokens(config.user.conversational.max_tokens ?? 2000);
           setConversationalContextWindow(config.user.conversational.context_window_messages ?? 30);
         } else if (config.global?.conversational) {
+          console.log('⚠️ Loading GLOBAL conversational settings (no user override):', config.global.conversational);
           setConversationalModel(config.global.conversational.model || '');
           setConversationalTemp(config.global.conversational.temperature ?? 0.7);
           setConversationalMaxTokens(config.global.conversational.max_tokens ?? 2000);
@@ -75,21 +91,26 @@ const LLMSettingsPage: React.FC = () => {
         
         // Load analytical settings
         if (config.user?.analytical) {
+          console.log('✅ Loading USER analytical settings:', config.user.analytical);
           setAnalyticalModel(config.user.analytical.model || '');
           setAnalyticalTemp(config.user.analytical.temperature ?? 0.1);
           setAnalyticalMaxTokens(config.user.analytical.max_tokens ?? 4000);
           setAnalyticalContextWindow(config.user.analytical.context_window_messages ?? 30);
         } else if (config.global?.analytical) {
+          console.log('⚠️ Loading GLOBAL analytical settings (no user override):', config.global.analytical);
           setAnalyticalModel(config.global.analytical.model || '');
           setAnalyticalTemp(config.global.analytical.temperature ?? 0.1);
           setAnalyticalMaxTokens(config.global.analytical.max_tokens ?? 4000);
           setAnalyticalContextWindow(config.global.analytical.context_window_messages ?? 30);
         }
+        
+        console.log('📥 FINAL STATE - Conversational Model:', config.user?.conversational?.model || config.global?.conversational?.model);
+        console.log('📥 FINAL STATE - Analytical Model:', config.user?.analytical?.model || config.global?.analytical?.model);
       } else {
         throw new Error(data.error || 'Failed to load configuration');
       }
     } catch (error) {
-      console.error('Failed to load LLM configuration:', error);
+      console.error('❌ Failed to load LLM configuration:', error);
       setMessage({ type: 'error', text: 'Failed to load LLM configuration' });
     } finally {
       setLoading(false);
@@ -117,6 +138,11 @@ const LLMSettingsPage: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (!user?.id) {
+      setMessage({ type: 'error', text: 'User not authenticated' });
+      return;
+    }
+    
     setSaving(true);
     setMessage(null);
     
@@ -136,13 +162,16 @@ const LLMSettingsPage: React.FC = () => {
         }
       };
 
+      console.log('🔍 SAVING WITH USER ID:', user.id, 'USERNAME:', user.username);
+      console.log('📝 Preferences:', preferences);
+
       const response = await fetch('http://localhost:3001/api/llm/config/user', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: 1, // TODO: Get from auth context
+          userId: user.id,
           preferences
         })
       });
@@ -203,17 +232,17 @@ const LLMSettingsPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-4xl mx-auto">
+    <div className="h-screen w-full bg-gray-100 overflow-y-auto" style={{ overflowY: 'scroll' }}>
+      <div className="max-w-4xl mx-auto p-6 pb-32">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-800 flex items-center">
                 <span className="text-2xl mr-3">🤖</span>
-                LLM Settings
+                LLM Settings v2.0 🔥 NEW VERSION
               </h1>
-              <p className="text-gray-600 mt-2">Configure your language model preferences</p>
+              <p className="text-gray-600 mt-2">Configure your language model preferences - UPDATED CODE ACTIVE</p>
             </div>
             <button
               onClick={handleTestConnection}

@@ -5,7 +5,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import Navigation from './components/Layout/Navigation';
 import ChatPage from './components/Chat/ChatPage';
 import CharactersPage from './components/Characters/CharactersPage';
-import SettingsPage from './components/Settings/SettingsPage';
+import LLMSettingsPage from './components/Settings/LLMSettingsPage';
 import LoginPage from './components/Auth/LoginPage';
 import RegisterPage from './components/Auth/RegisterPage';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -73,7 +73,7 @@ const AppContent: React.FC = () => {
           } />
           <Route path="/settings" element={
             <ProtectedRoute>
-              <SettingsPage />
+              <LLMSettingsPage />
             </ProtectedRoute>
           } />
         </Routes>

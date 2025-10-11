@@ -104,16 +104,21 @@ class TaskVerificationService extends AbstractService {
                 detected_ai_generation: { type: 'boolean' }
             };
 
-            // Step 6: Call LLM2 (Qwen) for structured verification analysis
-            this.logger.info('Requesting LLM verification analysis', { 
-                model: 'LLM2',
-                commitmentId 
+            // Step 6: Call analytical LLM for structured verification analysis
+            this.logger.info('Requesting LLM verification analysis (analytical model)', { 
+                commitmentId,
+                userId,
+                role: 'analytical'
             });
 
             const verificationResult = await this.structuredResponse.generateStructuredResponse(
                 verificationPrompt,
                 verificationSchema,
-                { model: 'LLM2' }
+                { 
+                    userId: userId,
+                    role: 'analytical',
+                    temperature: 0.1  // Low temperature for analytical verification
+                }
             );
 
             this.logger.debug('Received verification result', { 

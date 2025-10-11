@@ -427,7 +427,7 @@ Convert to proper JSON format.`;
      * DOMAIN LAYER: LLM-powered psychological state analysis and update using character framework
      * Core intelligence for authentic character behavior evolution
      */
-    async analyzeAndUpdateState(chatId, conversationHistory, currentMessage, personality) {
+    async analyzeAndUpdateState(chatId, userId, conversationHistory, currentMessage, personality) {
         try {
             // Ensure we have the character framework
             const framework = await this.ensurePersonalityFramework(personality);
@@ -503,6 +503,8 @@ How would this naturally affect their internal state? Consider time-of-day facto
                     });
                 } else {
                     updates = await this.structuredResponse.generateStructuredResponse(prompt, schema, {
+                        userId: userId,
+                        role: 'analytical',
                         temperature: 0.3,
                         maxTokens: 2500, // Increased from 600
                         retries: 2 // Reduced retries to fail faster during model switches
@@ -524,7 +526,7 @@ How would this naturally affect their internal state? Consider time-of-day facto
             await this.updateCharacterState(chatId, updates);
             
             // Weight recent memories based on psychological impact
-            await this.weightRecentMemories(chatId, conversationHistory, updates, framework);
+            await this.weightRecentMemories(chatId, userId, conversationHistory, updates, framework);
             
             return await this.getCharacterState(chatId);
             
@@ -591,7 +593,7 @@ How would this naturally affect their internal state? Consider time-of-day facto
     /**
      * DOMAIN LAYER: Weight recent memories based on psychological impact
      */
-    async weightRecentMemories(chatId, conversationHistory, stateUpdates, framework) {
+    async weightRecentMemories(chatId, userId, conversationHistory, stateUpdates, framework) {
         // Filter for user messages that have database IDs
         const recentMessages = conversationHistory.slice(-3)
             .filter(msg => msg.role === 'user' && msg.id);
@@ -648,6 +650,8 @@ Rate significance (1-10) for:
                         });
                     } else {
                         weightData = await this.structuredResponse.generateStructuredResponse(prompt, schema, {
+                            userId: userId,
+                            role: 'analytical',
                             temperature: 0.2,
                             maxTokens: 800, // Increased from 300
                             retries: 2 // Reduced retries to fail faster during model switches
